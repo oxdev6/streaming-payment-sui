@@ -1,0 +1,43 @@
+[network]
+name = "devnet"
+deployment_fee_rate = 10
+
+[accounts.deployer]
+mnemonic = "twice particular affair smile push picture miss apart thirty such lady focus argue harbor damp enter expose opera keen ability lava chaos lawn judge"
+balance = 100_000_000_000_000
+# secret_key: 753b7cc01a1a2e86221266a154af739463fce51219d97e4f856cd7200c3bd2a601
+# stx_address: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
+
+[accounts.wallet_1]
+mnemonic = "sell invite acquire kitten bamboo drastic jelly vivid peace spawn twice guilt pave pen trash pretty park cube fragile unaware remain midnight betray rebuild"
+balance = 100_000_000_000_000
+# secret_key: 7287ba251d44a4d3fd9276c88ce34c5c52a038955511cccaf77e61068649c17801
+# stx_address: ST1SJ3DTE5DN7X54YDH5D64R3BCB6A2AG2ZQ8YPD5
+
+[accounts.wallet_2]
+mnemonic = "hold excess usual excess ring elephant install account animal crude saw half shrug fly stove husband size album season funny comic life grow federal"
+balance = 100_000_000_000_000
+# secret_key: 530d9f61984c888536871c6573073bdfc0058896dc1adfe9a6a10dfacadc209101
+# stx_address: ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG
+
+[accounts.wallet_3]
+mnemonic = "cycle puppy glare enroll cost improve round math donate caught cradle blast weasel recycle pull year boss tomorrow chalk dust scorpion runway profit subject"
+balance = 100_000_000_000_000
+# secret_key: d655b2523bcd65e34889725c73064feb17ceb796831c0e111ba1a552b0f31b3901
+# stx_address: ST2JHG361ZXG51QTKY2NQCVBPPRRE2KZB1HR05NNC
+
+[accounts.faucet]
+mnemonic = "shadow private easily thought say logic fault paddle word top book during ignore notable orange flight clock image wealth health outside kitten belt reform"
+balance = 100_000_000_000_000
+# secret_key: de433bdfa14ec43aa1098d5be594c8ffb20a31485ff9de2923b2689471c401b801
+# stx_address: STNHKEPYEPJ8ET55ZZ0M5A34J0R3N5FM2CMMMAZ6
+
+[devnet]
+disable_stacks_explorer = false
+disable_stacks_api = false
+stacks_node_image_url = "quay.io/hirosystems/stacks-node:2.4"
+stacks_api_image_url = "hirosystems/stacks-blockchain-api:7.7.0"
+stacks_explorer_image_url = "hirosystems/explorer:latest"
+bitcoin_node_image_url = "quay.io/hirosystems/bitcoind:26"
+postgres_image_url = "postgres:15"
+enable_subnet_node = false

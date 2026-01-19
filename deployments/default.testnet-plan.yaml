@@ -1,0 +1,24 @@
+---
+id: 0
+name: "USDCx Streaming Payments - Testnet Deployment"
+network: testnet
+stacks-node: "https://stacks-node-api.testnet.stacks.co"
+bitcoin-node: "https://blockstream.info/testnet/api"
+plan:
+  batches:
+    - id: 0
+      transactions:
+        - contract-publish:
+            contract-name: mock-usdcx
+            expected-sender: ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG
+            cost: 50000
+            path: contracts/mock-usdcx.clar
+            anchor-block-only: true
+            clarity-version: 2
+        - contract-publish:
+            contract-name: usdcx-streaming
+            expected-sender: ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG
+            cost: 80000
+            path: contracts/usdcx-streaming.clar
+            anchor-block-only: true
+            clarity-version: 2

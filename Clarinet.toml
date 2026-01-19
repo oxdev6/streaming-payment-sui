@@ -1,0 +1,20 @@
+[project]
+name = "usdcx-streaming-payments"
+description = "USDCx Streaming Payments - Time-based payment streams using SIP-010 stablecoin"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+[contracts.usdcx-streaming]
+path = "contracts/usdcx-streaming.clar"
+clarity_version = 2
+epoch = 2.4
+
+[contracts.mock-usdcx]
+path = "contracts/mock-usdcx.clar"
+clarity_version = 2
+epoch = 2.4
+
+[repl.analysis]
+passes = ["check_checker"]
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
