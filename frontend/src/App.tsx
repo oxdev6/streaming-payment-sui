@@ -1,29 +1,17 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { AppConfig, showConnect, UserSession, openContractCall } from "@stacks/connect";
 import {
-  uintCV,
-  principalCV,
-  PostConditionMode,
-  AnchorMode,
-} from "@stacks/transactions";
-import { StacksTestnet } from "@stacks/network";
-
-// ===========================================
-// Configuration
-// ===========================================
-
-const appConfig = new AppConfig(["store_write", "publish_data"]);
-const userSession = new UserSession({ appConfig });
-const network = new StacksTestnet();
-
-// ============================================
-// 👇 CHANGE THIS TO YOUR DEPLOYED ADDRESS 👇
-// ============================================
-const CONTRACT_ADDRESS = "ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG";
-// ============================================
-
-const CONTRACT_NAME = "usdcx-streaming";
-const TOKEN_CONTRACT = "mock-usdcx";
+  ConnectButton,
+  useCurrentAccount,
+  useSignAndExecuteTransaction,
+} from "@mysten/dapp-kit";
+import { Transaction } from "@mysten/sui/transactions";
+import {
+  SUI_CHAIN,
+  SUI_STREAM_MODULE,
+  SUI_STREAM_PACKAGE_ID,
+  TOKEN_COIN_TYPES,
+  SUI_CLOCK_OBJECT_ID,
+} from "./config.sui";
 
 // ===========================================
 // Custom Icons (SVG-based for uniqueness)
@@ -121,12 +109,7 @@ interface Stream {
   withdrawn: number;
   startTime: number;
   endTime: number;
-}
-
-interface UserData {
-  profile: {
-    stxAddress: { testnet: string; mainnet: string };
-  };
+  tokenSymbol: string;
 }
 
 // ===========================================
@@ -151,14 +134,27 @@ const formatUSD = (amt: number) => `$${(amt / 1_000_000).toFixed(2)}`;
 // ===========================================
 
 export default function App() {
-  const [user, setUser] = useState<UserData | null>(null);
+  const currentAccount = useCurrentAccount();
+  const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const [streams, setStreams] = useState<Stream[]>([]);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: string } | null>(null);
   const [showIntro, setShowIntro] = useState(true);
+  const [onchainStreamId, setOnchainStreamId] = useState<string>("");
+
+  // Token selection (simple demo: USDCx, USDT, SUI)
+  const tokenOptions = [
+    { id: "USDCX", label: "USDCx (stable)", symbol: "USDCx" },
+    { id: "USDT", label: "USDT (stable)", symbol: "USDT" },
+    { id: "SUI", label: "SUI", symbol: "SUI" },
+  ] as const;
+
+  type TokenOption = (typeof tokenOptions)[number];
+
+  const [selectedToken, setSelectedToken] = useState<TokenOption>(tokenOptions[0]);
 
   // Form state
-  const [recipient, setRecipient] = useState("ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG");
+  const [recipient, setRecipient] = useState("0xSUI_RECIPIENT...DEV");
   const [amount, setAmount] = useState("100");
   const [duration, setDuration] = useState("60");
 
@@ -193,47 +189,7 @@ export default function App() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // ===========================================
-  // Auth
-  // ===========================================
-
-  useEffect(() => {
-    if (userSession.isSignInPending()) {
-      userSession.handlePendingSignIn().then((data) => {
-        setUser(data as UserData);
-      });
-    } else if (userSession.isUserSignedIn()) {
-      setUser(userSession.loadUserData() as UserData);
-    }
-  }, []);
-
-  const connectWallet = () => {
-    console.log("Connect wallet clicked");
-    showConnect({
-      appDetails: { 
-        name: "USDCx Streaming", 
-        icon: window.location.origin + "/icon.png" 
-      },
-      redirectTo: "/",
-      onFinish: () => {
-        const userData = userSession.loadUserData();
-        setUser(userData as UserData);
-        showToast("Wallet connected!", "success");
-        addEvent("Wallet connected", "success");
-      },
-      onCancel: () => {
-        showToast("Connection cancelled", "error");
-      },
-      userSession,
-    });
-  };
-
-  const disconnectWallet = () => {
-    userSession.signUserOut("/");
-    setUser(null);
-    showToast("Disconnected", "success");
-    addEvent("Wallet disconnected", "info");
-  };
+  // Wallet connect/disconnect handled by dapp-kit; we just read currentAccount
 
   // ===========================================
   // Stream Progress
@@ -285,12 +241,13 @@ export default function App() {
       withdrawn: 0,
       startTime: Date.now(),
       endTime: Date.now() + dur * 1000,
+      tokenSymbol: selectedToken.symbol,
     };
 
     setStreams(prev => [...prev, newStream]);
     setBalance(prev => prev - amt / 1_000_000);
     showToast(`Stream #${id} created!`, "success");
-    addEvent(`Created Stream #${id}: ${formatAmount(amt)} USDCx over ${dur}s`, "create");
+    addEvent(`Created Stream #${id}: ${formatAmount(amt)} ${selectedToken.symbol} over ${dur}s`, "create");
   };
 
   const claimDemoStream = (id: number) => {
@@ -313,8 +270,9 @@ export default function App() {
         s.streamId === id ? { ...s, withdrawn: s.withdrawn + claimable } : s
       )
     );
-    showToast(`Claimed ${formatAmount(claimable)} USDCx!`, "success");
-    addEvent(`Claimed ${formatAmount(claimable)} from Stream #${id}`, "claim");
+    const token = stream.tokenSymbol || selectedToken.symbol;
+    showToast(`Claimed ${formatAmount(claimable)} ${token}!`, "success");
+    addEvent(`Claimed ${formatAmount(claimable)} ${token} from Stream #${id}`, "claim");
   };
 
   const cancelDemoStream = (id: number) => {
@@ -332,8 +290,9 @@ export default function App() {
 
     setStreams(prev => prev.filter((s) => s.streamId !== id));
     setBalance(prev => prev + refund / 1_000_000);
-    showToast(`Refunded ${formatAmount(refund)} USDCx`, "success");
-    addEvent(`Cancelled Stream #${id}, refunded ${formatAmount(refund)}`, "cancel");
+    const token = stream.tokenSymbol || selectedToken.symbol;
+    showToast(`Refunded ${formatAmount(refund)} ${token}`, "success");
+    addEvent(`Cancelled Stream #${id}, refunded ${formatAmount(refund)} ${token}`, "cancel");
   };
 
   // ===========================================
@@ -354,120 +313,160 @@ export default function App() {
       withdrawn: 0,
       startTime: Date.now(),
       endTime: Date.now() + dur * 1000,
+      tokenSymbol: selectedToken.symbol,
     };
 
     setStreams(prev => [...prev, newStream]);
     setBalance(prev => prev - 50);
     showToast("Demo stream started! Watch the flow...", "success");
-    addEvent(`DEMO: Stream #${id}: 50 USDCx over 30s`, "create");
+    addEvent(`DEMO: Stream #${id}: 50 ${selectedToken.symbol} over 30s`, "create");
     setShowIntro(false);
   };
 
-  // ===========================================
-  // Contract Operations (WITH WALLET)
-  // ===========================================
-
   const handleCreateStream = () => {
-    console.log("Create stream button clicked, user:", user);
-    
-    if (!user) {
-      // Demo mode - no wallet connected
+    console.log("Create stream button clicked");
+
+    // If on-chain config or wallet is missing, fall back to demo mode.
+    if (!currentAccount || !SUI_STREAM_PACKAGE_ID) {
       createDemoStream();
       return;
     }
 
-    // Real blockchain transaction
-    setLoading(true);
-    const id = Math.floor(Math.random() * 100000);
-    
-    openContractCall({
-      contractAddress: CONTRACT_ADDRESS,
-      contractName: CONTRACT_NAME,
-      functionName: "create-stream",
-      functionArgs: [
-        uintCV(id),
-        principalCV(recipient),
-        uintCV(parseFloat(amount) * 1_000_000),
-        uintCV(parseInt(duration)),
-        principalCV(`${CONTRACT_ADDRESS}.${TOKEN_CONTRACT}`),
-      ],
-      network,
-      anchorMode: AnchorMode.Any,
-      postConditionMode: PostConditionMode.Allow,
-      onFinish: (data) => {
-        showToast(`TX submitted: ${data.txId.slice(0, 10)}...`, "success");
-        addEvent(`TX: ${data.txId.slice(0, 16)}...`, "tx");
-        setLoading(false);
-      },
-      onCancel: () => {
-        showToast("Transaction cancelled", "error");
-        setLoading(false);
-      },
-    });
+    const amt = parseFloat(amount) * 1_000_000;
+    const dur = parseInt(duration || "0", 10);
+    if (isNaN(amt) || amt <= 0 || isNaN(dur) || dur <= 0) {
+      showToast("Enter a valid amount and duration", "error");
+      return;
+    }
+
+    // For now we only support real on-chain streaming for SUI token.
+    if (selectedToken.id !== "SUI") {
+      showToast("On-chain streaming is currently enabled for SUI only. Using demo mode for other tokens.", "error");
+      createDemoStream();
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const tx = new Transaction();
+
+      const amountMicro = BigInt(Math.floor(amt));
+      const nowMs = Date.now();
+      const startTimeMs = BigInt(nowMs);
+      const endTimeMs = BigInt(nowMs + dur * 1000);
+
+      const [streamCoin] = tx.splitCoins(tx.gas, [amountMicro]);
+
+      tx.moveCall({
+        target: `${SUI_STREAM_PACKAGE_ID}::${SUI_STREAM_MODULE}::create_stream`,
+        typeArguments: [TOKEN_COIN_TYPES.SUI],
+        arguments: [
+          tx.pure.address(recipient),
+          streamCoin,
+          tx.pure.u64(startTimeMs),
+          tx.pure.u64(endTimeMs),
+        ],
+      });
+
+      signAndExecuteTransaction(
+        {
+          // Cast to any to satisfy dapp-kit typing across nested @mysten/sui versions.
+          transaction: tx as any,
+          chain: SUI_CHAIN,
+        },
+        {
+          onSuccess: (result) => {
+            showToast(
+              `Sui TX submitted: ${result.digest.slice(0, 10)}...`,
+              "success",
+            );
+            addEvent(
+              `Sui TX: ${result.digest.slice(0, 16)}...`,
+              "tx",
+            );
+            setLoading(false);
+          },
+          onError: () => {
+            showToast("Sui transaction failed", "error");
+            setLoading(false);
+          },
+        },
+      );
+    } catch {
+      showToast("Failed to build Sui transaction", "error");
+      setLoading(false);
+    }
   };
 
   const handleClaimStream = (id: number) => {
     console.log("Claim button clicked, stream:", id);
-    
-    if (!user) {
-      claimDemoStream(id);
-      return;
-    }
-
-    setLoading(true);
-    openContractCall({
-      contractAddress: CONTRACT_ADDRESS,
-      contractName: CONTRACT_NAME,
-      functionName: "claim",
-      functionArgs: [
-        uintCV(id), 
-        principalCV(`${CONTRACT_ADDRESS}.${TOKEN_CONTRACT}`)
-      ],
-      network,
-      anchorMode: AnchorMode.Any,
-      postConditionMode: PostConditionMode.Allow,
-      onFinish: (data) => {
-        showToast(`Claimed! TX: ${data.txId.slice(0, 10)}...`, "success");
-        addEvent(`Claim TX: ${data.txId.slice(0, 16)}...`, "tx");
-        setLoading(false);
-      },
-      onCancel: () => {
-        showToast("Cancelled", "error");
-        setLoading(false);
-      },
-    });
+    // Existing demo streams continue to use in-memory logic.
+    claimDemoStream(id);
   };
 
   const handleCancelStream = (id: number) => {
     console.log("Cancel button clicked, stream:", id);
-    
-    if (!user) {
-      cancelDemoStream(id);
+    // Existing demo streams continue to use in-memory logic.
+    cancelDemoStream(id);
+  };
+
+  // ===========================================
+  // On-chain Claim / Cancel (Sui)
+  // ===========================================
+
+  const handleOnchainAction = (kind: "claim" | "cancel") => {
+    if (!onchainStreamId || onchainStreamId.length < 5) {
+      showToast("Enter a valid on-chain Stream object ID", "error");
+      return;
+    }
+    if (!currentAccount || !SUI_STREAM_PACKAGE_ID) {
+      showToast("Connect a Sui wallet and configure VITE_SUI_STREAM_PACKAGE_ID to use on-chain actions", "error");
       return;
     }
 
-    setLoading(true);
-    openContractCall({
-      contractAddress: CONTRACT_ADDRESS,
-      contractName: CONTRACT_NAME,
-      functionName: "cancel-stream",
-      functionArgs: [
-        uintCV(id), 
-        principalCV(`${CONTRACT_ADDRESS}.${TOKEN_CONTRACT}`)
-      ],
-      network,
-      anchorMode: AnchorMode.Any,
-      postConditionMode: PostConditionMode.Allow,
-      onFinish: (data) => {
-        showToast(`Cancelled! TX: ${data.txId.slice(0, 10)}...`, "success");
-        addEvent(`Cancel TX: ${data.txId.slice(0, 16)}...`, "tx");
-        setLoading(false);
-      },
-      onCancel: () => {
-        showToast("Cancelled", "error");
-        setLoading(false);
-      },
-    });
+    try {
+      setLoading(true);
+      const tx = new Transaction();
+
+      tx.moveCall({
+        target: `${SUI_STREAM_PACKAGE_ID}::${SUI_STREAM_MODULE}::${kind}`,
+        typeArguments: [TOKEN_COIN_TYPES.SUI],
+        arguments: [
+          tx.object(onchainStreamId),
+          tx.object(SUI_CLOCK_OBJECT_ID),
+        ],
+      });
+
+      signAndExecuteTransaction(
+        {
+          // Cast to any to satisfy dapp-kit typing across nested @mysten/sui versions.
+          transaction: tx as any,
+          chain: SUI_CHAIN,
+        },
+        {
+          onSuccess: (result: any) => {
+            const digest = result?.digest ?? "";
+            const label = kind === "claim" ? "Claim" : "Cancel";
+            showToast(
+              `${label} TX submitted: ${digest ? digest.slice(0, 10) + "..." : "ok"}`,
+              "success",
+            );
+            addEvent(
+              `${label} TX: ${digest ? digest.slice(0, 16) + "..." : "ok"}`,
+              "tx",
+            );
+            setLoading(false);
+          },
+          onError: () => {
+            showToast(`Sui ${kind} transaction failed`, "error");
+            setLoading(false);
+          },
+        },
+      );
+    } catch {
+      showToast("Failed to build Sui transaction", "error");
+      setLoading(false);
+    }
   };
 
   // ===========================================
@@ -511,11 +510,11 @@ export default function App() {
           </div>
           
           <h1 className="text-5xl md:text-6xl font-bold mb-4 bg-gradient-to-r from-white via-cyan to-purple-400 bg-clip-text text-transparent">
-            USDCx Streaming
+            USDCx Streaming on Sui
           </h1>
           
           <p className="text-xl text-gray-400 mb-2">
-            Real-time payment streams on Stacks
+            Real-time payment streams on Sui
           </p>
           
           <p className="text-lg text-cyan mb-8 flex items-center justify-center gap-2">
@@ -563,7 +562,7 @@ export default function App() {
           </div>
 
           <p className="mt-12 text-gray-600 text-sm flex items-center justify-center gap-2">
-Built on <span className="text-cyan">Stacks</span>
+            Built on <span className="text-cyan">Sui</span>
           </p>
         </div>
       </div>
@@ -592,46 +591,41 @@ Built on <span className="text-cyan">Stacks</span>
             </button>
             <div>
               <h1 className="text-xl font-bold bg-gradient-to-r from-white to-cyan bg-clip-text text-transparent">
-                USDCx Streaming
+                USDCx Streaming on Sui
               </h1>
-              <p className="text-xs text-gray-500">Powered by Stacks</p>
+              <p className="text-xs text-gray-500">Powered by Sui</p>
             </div>
           </div>
 
           {/* Wallet */}
           <div className="flex items-center gap-3">
-            {user ? (
+            {currentAccount ? (
               <>
                 <div className="flex items-center gap-2 bg-surface border border-green-500/30 rounded-full px-3 py-1.5">
                   <span className="status-dot bg-green-500" />
-                  <span className="font-mono text-xs text-green-400">{formatAddress(user.profile.stxAddress.testnet)}</span>
+                  <span className="font-mono text-xs text-green-400">{formatAddress(currentAccount.address)}</span>
                 </div>
-                <button 
-                  type="button"
-                  onClick={disconnectWallet} 
-                  className="btn-secondary py-1.5 px-3 rounded-full text-xs cursor-pointer"
-                >
-                  ✕
-                </button>
+                <ConnectButton className="btn-secondary py-1.5 px-3 rounded-full text-xs cursor-pointer" />
               </>
             ) : (
               <>
                 <div className="flex items-center gap-2 bg-surface border border-orange-500/30 rounded-full px-3 py-1.5">
                   <span className="status-dot bg-orange-500" />
-                  <span className="text-xs text-orange-400">Demo Mode</span>
+                  <span className="text-xs text-orange-400">Sui Demo Mode</span>
                 </div>
-                <button 
-                  type="button"
-                  onClick={connectWallet} 
-                  className="btn-primary py-1.5 px-3 rounded-full text-xs flex items-center gap-1 cursor-pointer"
-                >
+                <ConnectButton className="btn-primary py-1.5 px-3 rounded-full text-xs flex items-center gap-1 cursor-pointer">
                   <span className="w-3 h-3">{Icons.wallet}</span>
-                  Connect
-                </button>
+                  <span>Connect Sui Wallet</span>
+                </ConnectButton>
               </>
             )}
           </div>
         </header>
+
+        {/* Supported wallets hint */}
+        <p className="mt-1 text-[10px] text-gray-500 text-right">
+          Works with Sui Wallet, Suiet, Ethos, Surf and other Sui-compatible wallets.
+        </p>
 
         {/* Stats */}
         <div className="grid grid-cols-4 gap-3 mb-6">
@@ -679,10 +673,10 @@ Built on <span className="text-cyan">Stacks</span>
 
             <div className="space-y-3">
               <div>
-                <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Recipient</label>
+                <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Recipient (Sui address)</label>
                 <input
                   type="text"
-                  placeholder="ST2CY5V39..."
+                  placeholder="0x..."
                   value={recipient}
                   onChange={(e) => setRecipient(e.target.value)}
                   className="input py-2 text-sm"
@@ -699,12 +693,34 @@ Built on <span className="text-cyan">Stacks</span>
                       onChange={(e) => setAmount(e.target.value)}
                       className="input py-2 text-sm pr-14"
                     />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-xs">USDCx</span>
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-xs">{selectedToken.symbol}</span>
                   </div>
                 </div>
                 <div>
+                  <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Token</label>
+                  <select
+                    aria-label="Select token"
+                    value={selectedToken.id}
+                    onChange={(e) => {
+                      const next = tokenOptions.find(t => t.id === e.target.value as TokenOption["id"]);
+                      if (next) setSelectedToken(next);
+                    }}
+                    className="input py-2 text-sm"
+                  >
+                    {tokenOptions.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <div>
                   <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Duration</label>
                   <select 
+                    aria-label="Select duration"
                     value={duration} 
                     onChange={(e) => setDuration(e.target.value)} 
                     className="input py-2 text-sm"
@@ -736,8 +752,46 @@ Built on <span className="text-cyan">Stacks</span>
             <div className="mt-3 p-2 bg-deep rounded-lg text-[10px] text-gray-500 flex justify-between">
               <span>Rate:</span>
               <span className="text-cyan font-mono">
-                {(parseFloat(amount || "0") / parseInt(duration || "1")).toFixed(4)} USDCx/s
+                {(parseFloat(amount || "0") / parseInt(duration || "1")).toFixed(4)} {selectedToken.symbol}/s
               </span>
+            </div>
+
+            {/* On-chain Stream Controls */}
+            <div className="mt-4 pt-3 border-t border-white/5 space-y-2">
+              <div className="flex items-center justify-between text-[10px] text-gray-500 mb-1">
+                <span className="uppercase tracking-wider">On-chain Stream (Sui)</span>
+                <span className="text-gray-600">
+                  Package:{" "}
+                  {SUI_STREAM_PACKAGE_ID
+                    ? <span className="font-mono text-cyan">{SUI_STREAM_PACKAGE_ID.slice(0, 8)}...</span>
+                    : <span className="text-orange-400">not configured</span>}
+                </span>
+              </div>
+              <input
+                type="text"
+                placeholder="0x<stream_object_id> (testnet)"
+                value={onchainStreamId}
+                onChange={(e) => setOnchainStreamId(e.target.value)}
+                className="input py-2 text-[11px] font-mono"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleOnchainAction("claim")}
+                  disabled={loading}
+                  className="flex-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 text-[11px] font-semibold py-1.5 px-2 rounded-lg transition cursor-pointer disabled:cursor-not-allowed"
+                >
+                  On-chain Claim
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOnchainAction("cancel")}
+                  disabled={loading}
+                  className="flex-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 text-[11px] font-semibold py-1.5 px-2 rounded-lg transition cursor-pointer disabled:cursor-not-allowed"
+                >
+                  On-chain Cancel
+                </button>
+              </div>
             </div>
           </div>
 
@@ -826,7 +880,7 @@ Built on <span className="text-cyan">Stacks</span>
 
         {/* Footer */}
         <footer className="text-center mt-6 text-gray-600 text-xs flex items-center justify-center gap-2">
-          Built on <span className="text-cyan">Stacks</span>
+          Built on <span className="text-cyan">Sui</span>
         </footer>
       </div>
 
