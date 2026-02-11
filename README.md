@@ -33,20 +33,25 @@ Traditional payments are **all-or-nothing**:
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Sui)
 
 ```bash
-# 1. Test the smart contract
-cd "streaming payments"
-clarinet test
+# 1. Publish the Move package (get package ID)
+cd sui
+sui client publish --gas-budget 100000000
 
-# 2. Launch the frontend
-cd frontend
-npm install
-npm run dev
+# 2. Configure frontend
+cd ../frontend
+cp .env.example .env
+# Edit .env: set VITE_SUI_STREAM_PACKAGE_ID=0x<your_package_id>
 
-# 3. Open http://localhost:5173
+# 3. Launch frontend
+npm install && npm run dev
+
+# 4. Open http://localhost:5173
 ```
+
+See `docs/FRONTEND_SETUP.md` for full Sui frontend config.
 
 ---
 
@@ -100,23 +105,28 @@ npm run dev
 ## 📁 Project Structure
 
 ```
-streaming-payments/
-├── contracts/
-│   ├── usdcx-streaming.clar    # Main streaming contract
-│   └── mock-usdcx.clar         # SIP-010 test token
-├── tests/
-│   └── usdcx-stream_test.ts    # Comprehensive test suite
+streaming-payment/
+├── sui/                        # Sui Move package
+│   ├── sources/
+│   │   └── stream.move         # Streaming payment module
+│   └── Move.toml
+├── contracts/                  # Stacks Clarity (legacy)
+│   ├── usdcx-streaming.clar
+│   └── mock-usdcx.clar
 ├── frontend/
 │   ├── src/
-│   │   ├── App.tsx             # React + TypeScript + Stacks.js
-│   │   ├── main.tsx
-│   │   └── index.css           # Tailwind CSS
-│   ├── package.json
-│   └── tailwind.config.js
-├── deployments/
-│   └── default.testnet-plan.yaml
-├── Clarinet.toml
-├── DEPLOY.md                   # Deployment guide
+│   │   ├── App.tsx             # React + Vite + Sui
+│   │   ├── config.sui.ts       # Sui env config
+│   │   └── ...
+│   ├── .env.example            # Copy to .env, set VITE_SUI_*
+│   └── package.json
+├── docs/
+│   ├── sui-architecture.md
+│   ├── FRONTEND_SETUP.md       # Sui frontend config
+│   └── sui-submission/         # Monthly submission data
+│       ├── DEPLOYMENT_DATA.md  # Package ID, tx digests
+│       └── SUBMISSION_CHECKLIST.md
+├── DEPLOY.md
 └── README.md
 ```
 

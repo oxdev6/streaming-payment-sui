@@ -21,3 +21,8 @@ Thumbs.db
 
 # Frontend build output
 frontend/dist/
+
+# Environment (contains package IDs, keys)
+.env
+frontend/.env
+*.env.local
