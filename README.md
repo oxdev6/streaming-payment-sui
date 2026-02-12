@@ -51,7 +51,7 @@ npm install && npm run dev
 # 4. Open http://localhost:5173
 ```
 
-See `docs/FRONTEND_SETUP.md` for full Sui frontend config.
+See [docs/QUICK_START_SUI.md](docs/QUICK_START_SUI.md) for a 5-minute setup, or [docs/FRONTEND_SETUP.md](docs/FRONTEND_SETUP.md) for full config.
 
 ---
 

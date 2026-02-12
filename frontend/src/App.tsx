@@ -1290,6 +1290,17 @@ export default function App() {
             <a href="https://docs.sui.io" target="_blank" rel="noopener noreferrer" className="hover:text-cyan transition-colors">
               Sui Docs
             </a>
+            {SUI_STREAM_PACKAGE_ID && (
+              <button
+                type="button"
+                onClick={() => copyToClipboard(SUI_STREAM_PACKAGE_ID, "Package ID")}
+                className="hover:text-cyan transition-colors inline-flex items-center gap-1 cursor-pointer"
+                title="Copy package ID"
+              >
+                <span className="w-3 h-3">{Icons.copy}</span>
+                Package ID
+              </button>
+            )}
             <span className="text-gray-600">Stream Payments · Real-time payments on Sui</span>
           </div>
         </footer>
