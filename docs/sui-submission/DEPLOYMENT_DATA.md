@@ -23,8 +23,8 @@ Record key transaction digests for verification:
 | Action | Tx Digest | Notes |
 |--------|-----------|-------|
 | Package publish | `6HHc7CCJLQtL7U7Za7GXetCcKRXFNqdCg1UfumbQF2si` | Initial deployment |
-| Create stream (sample) | `0x<tx_digest>` | Optional demo tx |
-| Claim (sample) | `0x<tx_digest>` | Optional demo tx |
+| Create stream (sample) | _Add after running frontend_ | Run create → copy from Suiexplorer |
+| Claim (sample) | _Add after claiming_ | Run claim → copy from Suiexplorer |
 
 ---
 
@@ -55,3 +55,16 @@ Record key transaction digests for verification:
    - This file → Package ID and tx digest rows
 
 5. **Verify** on [Suiexplorer](https://suiexplorer.com) (Testnet/Mainnet as applicable).
+
+---
+
+## Usage Proof (Optional – for submission)
+
+To get create_stream and claim tx links:
+
+1. Run frontend: `cd frontend && npm run dev`
+2. Connect wallet (testnet), use "Use my address" for recipient
+3. Create stream: amount `0.001`, duration `30s`, click Create Stream
+4. Stream ID auto-fills; wait ~30s for vesting
+5. Click "On-chain Claim"
+6. Copy tx digests from Suiexplorer (or Event Log) and add above

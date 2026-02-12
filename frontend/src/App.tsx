@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useMemo } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   ConnectButton,
   useCurrentAccount,
   useSignAndExecuteTransaction,
+  useSuiClient,
 } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
 import {
@@ -11,6 +13,9 @@ import {
   SUI_STREAM_PACKAGE_ID,
   TOKEN_COIN_TYPES,
   SUI_CLOCK_OBJECT_ID,
+  getExplorerTxUrl,
+  getExplorerObjectUrl,
+  NETWORK_LABEL,
 } from "./config.sui";
 
 // ===========================================
@@ -96,6 +101,17 @@ const Icons = {
       <path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0L12 2.69z" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   ),
+  copy: (
+    <svg viewBox="0 0 24 24" fill="none" className="w-full h-full">
+      <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  ),
+  external: (
+    <svg viewBox="0 0 24 24" fill="none" className="w-full h-full">
+      <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
 };
 
 // ===========================================
@@ -129,17 +145,120 @@ const formatTime = (secs: number) => {
 
 const formatUSD = (amt: number) => `$${(amt / 1_000_000).toFixed(2)}`;
 
+/** Sui address: 0x + 32–64 hex chars */
+const isValidSuiAddress = (addr: string): boolean =>
+  /^0x[a-fA-F0-9]{32,64}$/.test(addr.trim());
+
 // ===========================================
 // App Component
 // ===========================================
 
 export default function App() {
   const currentAccount = useCurrentAccount();
+  const suiClient = useSuiClient();
   const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const [streams, setStreams] = useState<Stream[]>([]);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: string } | null>(null);
-  const [showIntro, setShowIntro] = useState(true);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isHomePath = !location.pathname || location.pathname === "/";
+  const [showIntro, setShowIntro] = useState(isHomePath);
+
+  type PageId = "home" | "payroll" | "grants" | "subscriptions" | "vesting";
+  const pathToPage = (path: string): PageId => {
+    const p = path.replace(/^\//, "");
+    if (p === "payroll" || p === "grants" || p === "subscriptions" || p === "vesting") return p;
+    return "home";
+  };
+  const currentPage = pathToPage(location.pathname);
+
+  const goToPage = (page: PageId) => {
+    if (page === "home") navigate("/");
+    else navigate(`/${page}`);
+  };
+
+  // Page-specific config: labels, presets, copy
+  const pageConfig = useMemo(() => {
+    const configs: Record<PageId, { recipientLabel: string; amountLabel: string; createBtn: string; durationOptions: { value: string; label: string }[]; emptyTitle: string; emptyHint: string; rateLabel: string }> = {
+      home: {
+        recipientLabel: "Recipient (Sui address)",
+        amountLabel: "Amount",
+        createBtn: "Create Stream",
+        durationOptions: [
+          { value: "30", label: "30s" },
+          { value: "60", label: "1m" },
+          { value: "120", label: "2m" },
+        ],
+        emptyTitle: "No streams yet",
+        emptyHint: "Create a stream or run a quick demo",
+        rateLabel: "Rate",
+      },
+      payroll: {
+        recipientLabel: "Employee (Sui address)",
+        amountLabel: "Salary amount",
+        createBtn: "Create Payroll Stream",
+        durationOptions: [
+          { value: "30", label: "30s" },
+          { value: "60", label: "1m" },
+          { value: "300", label: "5m" },
+          { value: "3600", label: "1 hour" },
+          { value: "86400", label: "1 day" },
+          { value: "604800", label: "1 week" },
+        ],
+        emptyTitle: "No payroll streams",
+        emptyHint: "Start streaming salary to an employee",
+        rateLabel: "Pay rate",
+      },
+      grants: {
+        recipientLabel: "Grantee (Sui address)",
+        amountLabel: "Grant amount",
+        createBtn: "Create Grant Stream",
+        durationOptions: [
+          { value: "30", label: "30s" },
+          { value: "60", label: "1m" },
+          { value: "86400", label: "1 day" },
+          { value: "604800", label: "1 week" },
+          { value: "2592000", label: "30 days" },
+        ],
+        emptyTitle: "No grant streams",
+        emptyHint: "Release grant funding over time",
+        rateLabel: "Release rate",
+      },
+      subscriptions: {
+        recipientLabel: "Subscriber (Sui address)",
+        amountLabel: "Subscription amount",
+        createBtn: "Create Subscription Stream",
+        durationOptions: [
+          { value: "30", label: "30s" },
+          { value: "60", label: "1m" },
+          { value: "3600", label: "1 hour" },
+          { value: "86400", label: "1 day" },
+          { value: "604800", label: "1 week" },
+        ],
+        emptyTitle: "No subscription streams",
+        emptyHint: "Start a pay-as-you-use subscription",
+        rateLabel: "Usage rate",
+      },
+      vesting: {
+        recipientLabel: "Vesting recipient (Sui address)",
+        amountLabel: "Token amount",
+        createBtn: "Create Vesting Stream",
+        durationOptions: [
+          { value: "30", label: "30s" },
+          { value: "60", label: "1m" },
+          { value: "86400", label: "1 day" },
+          { value: "604800", label: "1 week" },
+          { value: "2592000", label: "30 days" },
+        ],
+        emptyTitle: "No vesting streams",
+        emptyHint: "Stream tokens with linear vesting",
+        rateLabel: "Vest rate",
+      },
+    };
+    return configs[currentPage];
+  }, [currentPage]);
+
   const [onchainStreamId, setOnchainStreamId] = useState<string>("");
 
   // Token selection (simple demo: USDCx, USDT, SUI)
@@ -154,15 +273,21 @@ export default function App() {
   const [selectedToken, setSelectedToken] = useState<TokenOption>(tokenOptions[0]);
 
   // Form state
-  const [recipient, setRecipient] = useState("0xSUI_RECIPIENT...DEV");
+  const [recipient, setRecipient] = useState("");
   const [amount, setAmount] = useState("100");
   const [duration, setDuration] = useState("60");
+  // Page-specific inputs (for functional calculators)
+  const [hourlyRate, setHourlyRate] = useState("50");        // Payroll: rate/hr → amount
+  const [grantDays, setGrantDays] = useState("7");           // Grants: days → duration
+  const [subAmount, setSubAmount] = useState("10");          // Subscriptions: $ per cycle
+  const [subCycle, setSubCycle] = useState<"day"|"week"|"month">("month");
+  const [vestDays, setVestDays] = useState("30");            // Vesting: days → duration
 
   // Demo balance
   const [balance, setBalance] = useState(1000);
 
-  // Event log for judges
-  const [eventLog, setEventLog] = useState<{ time: string; event: string; type: string }[]>([]);
+  // Event log for judges (digest optional for tx links)
+  const [eventLog, setEventLog] = useState<{ time: string; event: string; type: string; digest?: string }[]>([]);
 
   // Stats
   const totalStreamed = streams.reduce((acc, s) => acc + s.withdrawn, 0);
@@ -175,9 +300,18 @@ export default function App() {
       .reduce((acc, s) => acc + s.amount / ((s.endTime - s.startTime) / 1000), 0);
   }, [streams]);
 
-  const addEvent = (event: string, type: string) => {
+  const addEvent = (event: string, type: string, digest?: string) => {
     const time = new Date().toLocaleTimeString();
-    setEventLog(prev => [{ time, event, type }, ...prev].slice(0, 10));
+    setEventLog(prev => [{ time, event, type, digest }, ...prev].slice(0, 10));
+  };
+
+  const copyToClipboard = async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(`${label} copied!`, "success");
+    } catch {
+      showToast("Failed to copy", "error");
+    }
   };
 
   // ===========================================
@@ -338,6 +472,10 @@ export default function App() {
       showToast("Enter a valid amount and duration", "error");
       return;
     }
+    if (!isValidSuiAddress(recipient)) {
+      showToast("Enter a valid Sui address (0x + 32–64 hex characters)", "error");
+      return;
+    }
 
     // For now we only support real on-chain streaming for SUI token.
     if (selectedToken.id !== "SUI") {
@@ -375,15 +513,43 @@ export default function App() {
           chain: SUI_CHAIN,
         },
         {
-          onSuccess: (result) => {
-            showToast(
-              `Sui TX submitted: ${result.digest.slice(0, 10)}...`,
-              "success",
-            );
-            addEvent(
-              `Sui TX: ${result.digest.slice(0, 16)}...`,
-              "tx",
-            );
+          onSuccess: async (result: { digest: string }) => {
+            const digest = result.digest;
+            showToast(`Stream created! TX: ${digest.slice(0, 10)}...`, "success");
+            addEvent(`Sui create_stream: ${digest.slice(0, 16)}...`, "tx", digest);
+
+            // Wait for tx to be indexed, then fetch created Stream object ID
+            let streamId = "";
+            try {
+              const tx = await suiClient.waitForTransaction({
+                digest,
+                options: { showObjectChanges: true },
+                timeout: 15000,
+              });
+              const created = (tx.objectChanges ?? []).find(
+                (c: { type?: string; objectId?: string; objectType?: string }) =>
+                  c.type === "created" && c.objectType?.includes("::stream::Stream")
+              );
+              if (created && "objectId" in created) streamId = created.objectId;
+            } catch {
+              try {
+                const tx = await suiClient.getTransactionBlock({
+                  digest,
+                  options: { showObjectChanges: true },
+                });
+                const created = (tx.objectChanges ?? []).find(
+                  (c: { type?: string; objectId?: string; objectType?: string }) =>
+                    c.type === "created" && c.objectType?.includes("::stream::Stream")
+                );
+                if (created && "objectId" in created) streamId = created.objectId;
+              } catch {
+                // Ignore
+              }
+            }
+            if (streamId) {
+              setOnchainStreamId(streamId);
+              showToast(`Stream ID saved! Wait for vesting, then click Claim.`, "success");
+            }
             setLoading(false);
           },
           onError: () => {
@@ -454,6 +620,7 @@ export default function App() {
             addEvent(
               `${label} TX: ${digest ? digest.slice(0, 16) + "..." : "ok"}`,
               "tx",
+              digest || undefined,
             );
             setLoading(false);
           },
@@ -509,8 +676,8 @@ export default function App() {
             </div>
           </div>
           
-          <h1 className="text-5xl md:text-6xl font-bold mb-4 bg-gradient-to-r from-white via-cyan to-purple-400 bg-clip-text text-transparent">
-            USDCx Streaming on Sui
+          <h1 className="text-5xl md:text-6xl font-bold mb-4 bg-gradient-to-r from-white via-cyan to-purple-400 bg-clip-text text-transparent tracking-tight">
+            Stream Payments
           </h1>
           
           <p className="text-xl text-gray-400 mb-2">
@@ -537,7 +704,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => {
-                console.log("Enter app clicked");
+                goToPage("home");
                 setShowIntro(false);
               }}
               className="btn-secondary text-lg py-4 px-8 flex items-center justify-center gap-2 cursor-pointer"
@@ -547,17 +714,26 @@ export default function App() {
             </button>
           </div>
 
-          <div className="mt-12 grid grid-cols-4 gap-4 text-sm">
+          <p className="mt-8 text-[12px] text-gray-500 mb-3">Click to open:</p>
+          <div className="mt-2 grid grid-cols-4 gap-4 text-sm">
             {[
-              { icon: Icons.payroll, label: "Payroll" },
-              { icon: Icons.target, label: "Grants" },
-              { icon: Icons.play, label: "Subscriptions" },
-              { icon: Icons.handshake, label: "Vesting" },
+              { icon: Icons.payroll, label: "Payroll", page: "payroll" as const },
+              { icon: Icons.target, label: "Grants", page: "grants" as const },
+              { icon: Icons.play, label: "Subscriptions", page: "subscriptions" as const },
+              { icon: Icons.handshake, label: "Vesting", page: "vesting" as const },
             ].map((item) => (
-              <div key={item.label} className="text-gray-500 flex flex-col items-center">
-                <div className="w-8 h-8 mb-2 text-gray-400">{item.icon}</div>
-                <div>{item.label}</div>
-              </div>
+              <button
+                key={item.label}
+                type="button"
+                onClick={() => {
+                  goToPage(item.page);
+                  setShowIntro(false);
+                }}
+                className="group text-gray-500 flex flex-col items-center justify-center p-4 rounded-xl border border-white/10 hover:border-cyan/50 hover:bg-cyan/10 hover:text-cyan transition-all cursor-pointer bg-white/5 min-h-[90px]"
+              >
+                <div className="w-8 h-8 mb-2 text-gray-400 group-hover:text-cyan transition-colors">{item.icon}</div>
+                <div className="font-medium">{item.label}</div>
+              </button>
             ))}
           </div>
 
@@ -580,31 +756,62 @@ export default function App() {
 
       <div className="relative z-10 max-w-6xl mx-auto px-6 py-6">
         {/* Header */}
-        <header className="flex justify-between items-center mb-6">
+        <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div className="flex items-center gap-3">
             <button 
               type="button"
-              onClick={() => setShowIntro(true)}
+              onClick={() => { setShowIntro(true); goToPage("home"); }}
               className="w-12 h-12 bg-gradient-to-br from-cyan to-purple-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-cyan/30 hover:scale-105 transition-transform cursor-pointer"
             >
               <div className="w-7 h-7">{Icons.stream}</div>
             </button>
             <div>
-              <h1 className="text-xl font-bold bg-gradient-to-r from-white to-cyan bg-clip-text text-transparent">
-                USDCx Streaming on Sui
+              <h1 className="text-xl font-bold bg-gradient-to-r from-white to-cyan bg-clip-text text-transparent tracking-tight">
+                Stream Payments
               </h1>
-              <p className="text-xs text-gray-500">Powered by Sui</p>
+              <p className="text-xs text-gray-500">
+                {currentPage === "home" ? "Powered by Sui" : `${currentPage.charAt(0).toUpperCase() + currentPage.slice(1)}`}
+              </p>
             </div>
           </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Page nav */}
+            <nav className="flex gap-1">
+              {(["home", "payroll", "grants", "subscriptions", "vesting"] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => goToPage(p)}
+                  className={`px-2 py-1 rounded-lg text-[10px] font-medium transition cursor-pointer ${
+                    currentPage === p
+                      ? "bg-cyan/30 text-cyan"
+                      : "text-gray-500 hover:text-gray-300 hover:bg-white/5"
+                  }`}
+                >
+                  {p === "home" ? "Home" : p.charAt(0).toUpperCase() + p.slice(1)}
+                </button>
+              ))}
+            </nav>
 
           {/* Wallet */}
           <div className="flex items-center gap-3">
             {currentAccount ? (
               <>
-                <div className="flex items-center gap-2 bg-surface border border-green-500/30 rounded-full px-3 py-1.5">
-                  <span className="status-dot bg-green-500" />
+                <div className="flex items-center gap-1.5 bg-surface border border-green-500/30 rounded-full pl-3 pr-1 py-1.5">
+                  <span className="status-dot bg-green-500 shrink-0" />
                   <span className="font-mono text-xs text-green-400">{formatAddress(currentAccount.address)}</span>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(currentAccount.address, "Address")}
+                    className="p-1.5 rounded-full hover:bg-white/10 text-gray-400 hover:text-cyan transition-colors cursor-pointer"
+                    aria-label="Copy address"
+                  >
+                    <span className="w-3.5 h-3.5 block">{Icons.copy}</span>
+                  </button>
                 </div>
+                <span className="text-[10px] px-2 py-1 rounded-full bg-void/80 border border-white/10 text-gray-400 font-medium">
+                  {NETWORK_LABEL}
+                </span>
                 <ConnectButton className="btn-secondary py-1.5 px-3 rounded-full text-xs cursor-pointer" />
               </>
             ) : (
@@ -620,12 +827,24 @@ export default function App() {
               </>
             )}
           </div>
+          </div>
         </header>
 
         {/* Supported wallets hint */}
         <p className="mt-1 text-[10px] text-gray-500 text-right">
           Works with Sui Wallet, Suiet, Ethos, Surf and other Sui-compatible wallets.
         </p>
+
+        {/* Page header - minimal */}
+        <div className="mt-4 mb-3">
+          <h2 className="text-lg font-semibold text-cyan">
+            {currentPage === "home" && "Stream Payments"}
+            {currentPage === "payroll" && "Payroll Streaming"}
+            {currentPage === "grants" && "Grant Funding"}
+            {currentPage === "subscriptions" && "Subscription Payments"}
+            {currentPage === "vesting" && "Token Vesting"}
+          </h2>
+        </div>
 
         {/* Stats */}
         <div className="grid grid-cols-4 gap-3 mb-6">
@@ -664,27 +883,153 @@ export default function App() {
 
         {/* Main Grid */}
         <div className="grid lg:grid-cols-3 gap-4">
-          {/* Create Stream Form */}
+          {/* Create Stream Form - same working form on every page */}
           <div className="card p-4">
             <h2 className="text-sm font-semibold mb-4 flex items-center gap-2 text-gray-300">
               <span className="w-6 h-6 bg-gradient-to-br from-cyan/20 to-purple-500/20 rounded-lg flex items-center justify-center p-1 text-cyan">{Icons.send}</span>
-              Create Stream
+              {pageConfig.createBtn}
             </h2>
 
             <div className="space-y-3">
               <div>
-                <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Recipient (Sui address)</label>
+                <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">{pageConfig.recipientLabel}</label>
                 <input
                   type="text"
-                  placeholder="0x..."
+                  placeholder="0x... (use your address for self-test)"
                   value={recipient}
                   onChange={(e) => setRecipient(e.target.value)}
                   className="input py-2 text-sm"
                 />
+                {currentAccount && !recipient && (
+                  <button
+                    type="button"
+                    onClick={() => setRecipient(currentAccount.address)}
+                    className="mt-1 text-[10px] text-cyan hover:underline"
+                  >
+                    Use my address
+                  </button>
+                )}
               </div>
+
+              {/* Payroll: rate calculator */}
+              {currentPage === "payroll" && (
+                <div className="p-2 rounded-lg bg-cyan/10 border border-cyan/20">
+                  <label className="block text-[10px] text-cyan mb-1 uppercase">Hourly rate → total</label>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="number"
+                      value={hourlyRate}
+                      onChange={(e) => {
+                        const r = e.target.value;
+                        setHourlyRate(r);
+                        const dur = parseInt(duration) || 60;
+                        const hrs = dur / 3600;
+                        setAmount((parseFloat(r) * hrs).toFixed(2));
+                      }}
+                      className="input py-1.5 text-sm flex-1"
+                      placeholder="50"
+                    />
+                    <span className="text-xs text-gray-500">/hr ×</span>
+                    <select
+                      aria-label="Payroll duration"
+                      value={duration}
+                      onChange={(e) => {
+                        const d = e.target.value;
+                        setDuration(d);
+                        const hrs = parseInt(d) / 3600;
+                        setAmount((parseFloat(hourlyRate) * hrs).toFixed(2));
+                      }}
+                      className="input py-1.5 text-sm"
+                    >
+                      {pageConfig.durationOptions.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="text-[10px] text-gray-500 mt-1">Amount: {amount} {selectedToken.symbol}</p>
+                </div>
+              )}
+
+              {/* Grants: period in days */}
+              {currentPage === "grants" && (
+                <div className="p-2 rounded-lg bg-cyan/10 border border-cyan/20">
+                  <label className="block text-[10px] text-cyan mb-1 uppercase">Release over (days)</label>
+                  <input
+                    type="number"
+                    aria-label="Release period in days"
+                    value={grantDays}
+                    onChange={(e) => {
+                      const d = e.target.value;
+                      setGrantDays(d);
+                      const days = parseInt(d) || 1;
+                      setDuration((days * 86400).toString());
+                    }}
+                    className="input py-1.5 text-sm"
+                    min="1"
+                  />
+                </div>
+              )}
+
+              {/* Subscriptions: plan amount + cycle */}
+              {currentPage === "subscriptions" && (
+                <div className="p-2 rounded-lg bg-cyan/10 border border-cyan/20">
+                  <label className="block text-[10px] text-cyan mb-1 uppercase">Plan</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      aria-label="Subscription amount"
+                      value={subAmount}
+                      onChange={(e) => {
+                        const a = e.target.value;
+                        setSubAmount(a);
+                        const sec = subCycle === "day" ? 86400 : subCycle === "week" ? 604800 : 2592000;
+                        setAmount(a);
+                        setDuration(sec.toString());
+                      }}
+                      className="input py-1.5 text-sm flex-1"
+                    />
+                    <select
+                      aria-label="Subscription cycle"
+                      value={subCycle}
+                      onChange={(e) => {
+                        const c = e.target.value as "day"|"week"|"month";
+                        setSubCycle(c);
+                        const sec = c === "day" ? 86400 : c === "week" ? 604800 : 2592000;
+                        setDuration(sec.toString());
+                      }}
+                      className="input py-1.5 text-sm"
+                    >
+                      <option value="day">/ day</option>
+                      <option value="week">/ week</option>
+                      <option value="month">/ month</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Vesting: vest period in days */}
+              {currentPage === "vesting" && (
+                <div className="p-2 rounded-lg bg-cyan/10 border border-cyan/20">
+                  <label className="block text-[10px] text-cyan mb-1 uppercase">Vest over (days)</label>
+                  <input
+                    type="number"
+                    aria-label="Vest period in days"
+                    value={vestDays}
+                    onChange={(e) => {
+                      const d = e.target.value;
+                      setVestDays(d);
+                      const days = parseInt(d) || 1;
+                      setDuration((days * 86400).toString());
+                    }}
+                    className="input py-1.5 text-sm"
+                    min="1"
+                  />
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Amount</label>
+                  <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">{pageConfig.amountLabel}</label>
                   <div className="relative">
                     <input
                       type="number"
@@ -716,21 +1061,35 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                <div>
-                  <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Duration</label>
-                  <select 
-                    aria-label="Select duration"
-                    value={duration} 
-                    onChange={(e) => setDuration(e.target.value)} 
-                    className="input py-2 text-sm"
-                  >
-                    <option value="30">30s</option>
-                    <option value="60">1m</option>
-                    <option value="120">2m</option>
-                  </select>
+              {(currentPage === "home" || currentPage === "payroll") && (
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <div>
+                    <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Duration</label>
+                    <select 
+                      aria-label="Select duration"
+                      value={duration} 
+                      onChange={(e) => {
+                        const d = e.target.value;
+                        setDuration(d);
+                        if (currentPage === "payroll") {
+                          const hrs = parseInt(d) / 3600;
+                          setAmount((parseFloat(hourlyRate) * hrs).toFixed(2));
+                        }
+                      }} 
+                      className="input py-2 text-sm"
+                    >
+                      {pageConfig.durationOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-              </div>
+              )}
+              {(currentPage === "grants" || currentPage === "subscriptions" || currentPage === "vesting") && (
+                <div className="text-[10px] text-gray-500">
+                  Duration: {parseInt(duration) < 86400 ? `${parseInt(duration)}s` : `${Math.round(parseInt(duration) / 86400)} days`}
+                </div>
+              )}
             </div>
 
             <button 
@@ -745,12 +1104,12 @@ export default function App() {
                   Creating...
                 </>
               ) : (
-                <>Create Stream <span className="text-black/50">→</span></>
+                <>{pageConfig.createBtn} <span className="text-black/50">→</span></>
               )}
             </button>
 
             <div className="mt-3 p-2 bg-deep rounded-lg text-[10px] text-gray-500 flex justify-between">
-              <span>Rate:</span>
+              <span>{pageConfig.rateLabel}:</span>
               <span className="text-cyan font-mono">
                 {(parseFloat(amount || "0") / parseInt(duration || "1")).toFixed(4)} {selectedToken.symbol}/s
               </span>
@@ -767,13 +1126,36 @@ export default function App() {
                     : <span className="text-orange-400">not configured</span>}
                 </span>
               </div>
-              <input
-                type="text"
-                placeholder="0x<stream_object_id> (testnet)"
-                value={onchainStreamId}
-                onChange={(e) => setOnchainStreamId(e.target.value)}
-                className="input py-2 text-[11px] font-mono"
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  aria-label="On-chain Stream object ID"
+                  placeholder="0x<stream_object_id> (auto-filled after Create)"
+                  value={onchainStreamId}
+                  onChange={(e) => setOnchainStreamId(e.target.value)}
+                  className="input py-2 text-[11px] font-mono pr-10"
+                />
+                {onchainStreamId && (
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(onchainStreamId, "Stream ID")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-white/10 text-gray-400 hover:text-cyan transition-colors cursor-pointer"
+                    aria-label="Copy Stream ID"
+                  >
+                    <span className="w-3.5 h-3.5 block">{Icons.copy}</span>
+                  </button>
+                )}
+              </div>
+              {onchainStreamId && (
+                <a
+                  href={getExplorerObjectUrl(onchainStreamId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] text-cyan hover:underline inline-flex items-center gap-1"
+                >
+                  View on Suiexplorer <span className="w-3 h-3">{Icons.external}</span>
+                </a>
+              )}
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -795,7 +1177,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* Active Streams */}
+          {/* Active Streams - same working list on every page */}
           <div className="lg:col-span-2 card p-4">
             <h2 className="text-sm font-semibold mb-4 flex items-center gap-2 text-gray-300">
               <span className="w-6 h-6 bg-gradient-to-br from-green-500/20 to-cyan/20 rounded-lg flex items-center justify-center p-1 text-green-400">{Icons.chart}</span>
@@ -810,7 +1192,8 @@ export default function App() {
             {streams.length === 0 ? (
               <div className="text-center py-10 text-gray-500">
                 <div className="w-12 h-12 mx-auto mb-3 text-gray-600 opacity-30">{Icons.stream}</div>
-                <p className="text-sm">No streams yet</p>
+                <p className="text-sm">{pageConfig.emptyTitle}</p>
+                <p className="text-[10px] text-gray-600 mt-1">{pageConfig.emptyHint}</p>
                 <button 
                   type="button"
                   onClick={runQuickDemo} 
@@ -848,39 +1231,67 @@ export default function App() {
             <div className="space-y-1 max-h-32 overflow-y-auto">
               {eventLog.map((e, i) => (
                 <div key={i} className="flex items-center gap-2 text-xs">
-                  <span className="text-gray-600 font-mono">{e.time}</span>
-                  <span className={`w-2 h-2 rounded-full ${
+                  <span className="text-gray-600 font-mono shrink-0">{e.time}</span>
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${
                     e.type === 'create' ? 'bg-cyan' : 
                     e.type === 'claim' ? 'bg-green-500' : 
                     e.type === 'cancel' ? 'bg-red-500' : 
                     e.type === 'tx' ? 'bg-purple-500' : 'bg-gray-500'
                   }`} />
-                  <span className="text-gray-400">{e.event}</span>
+                  {e.digest ? (
+                    <a
+                      href={getExplorerTxUrl(e.digest)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-cyan hover:underline inline-flex items-center gap-1"
+                    >
+                      {e.event}
+                      <span className="w-3 h-3 opacity-70">{Icons.external}</span>
+                    </a>
+                  ) : (
+                    <span className="text-gray-400">{e.event}</span>
+                  )}
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Use Cases */}
+        {/* Use Cases - navigate to different pages */}
         <div className="mt-4 grid grid-cols-4 gap-3">
           {[
-            { icon: Icons.payroll, title: "Payroll", desc: "Pay by the second" },
-            { icon: Icons.target, title: "Grants", desc: "Milestone funding" },
-            { icon: Icons.play, title: "Subscriptions", desc: "Pay-as-you-watch" },
-            { icon: Icons.handshake, title: "Vesting", desc: "Token unlocks" },
+            { icon: Icons.payroll, title: "Payroll", desc: "Pay by the second", page: "payroll" as const },
+            { icon: Icons.target, title: "Grants", desc: "Milestone funding", page: "grants" as const },
+            { icon: Icons.play, title: "Subscriptions", desc: "Pay-as-you-watch", page: "subscriptions" as const },
+            { icon: Icons.handshake, title: "Vesting", desc: "Token unlocks", page: "vesting" as const },
           ].map((item) => (
-            <div key={item.title} className="card p-3 text-center hover:border-cyan/30 transition-colors group">
+            <button
+              key={item.title}
+              type="button"
+              onClick={() => goToPage(item.page)}
+              className={`card p-3 text-center hover:border-cyan/30 transition-colors group text-left cursor-pointer border-0 ${
+                currentPage === item.page ? "border-cyan/50 ring-1 ring-cyan/30" : ""
+              }`}
+            >
               <div className="w-6 h-6 mx-auto mb-2 text-gray-400 group-hover:text-cyan transition-colors">{item.icon}</div>
               <div className="font-semibold text-xs">{item.title}</div>
               <div className="text-[10px] text-gray-500">{item.desc}</div>
-            </div>
+            </button>
           ))}
         </div>
 
         {/* Footer */}
-        <footer className="text-center mt-6 text-gray-600 text-xs flex items-center justify-center gap-2">
-          Built on <span className="text-cyan">Sui</span>
+        <footer className="mt-8 pt-6 border-t border-white/5 text-center">
+          <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-gray-500">
+            <span>Built on <span className="text-cyan font-medium">Sui</span></span>
+            <a href="https://suiexplorer.com" target="_blank" rel="noopener noreferrer" className="hover:text-cyan transition-colors">
+              Sui Explorer
+            </a>
+            <a href="https://docs.sui.io" target="_blank" rel="noopener noreferrer" className="hover:text-cyan transition-colors">
+              Sui Docs
+            </a>
+            <span className="text-gray-600">Stream Payments · Real-time payments on Sui</span>
+          </div>
         </footer>
       </div>
 

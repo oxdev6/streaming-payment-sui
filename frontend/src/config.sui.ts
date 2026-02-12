@@ -20,3 +20,16 @@ export const TOKEN_COIN_TYPES = {
   SUI: '0x2::sui::SUI',
 } as const;
 
+// Explorer tx URL helper (append ?network=testnet for testnet)
+export const getExplorerTxUrl = (digest: string): string =>
+  SUI_CHAIN === 'sui:mainnet'
+    ? `https://suiexplorer.com/txblock/${digest}?network=mainnet`
+    : `https://suiexplorer.com/txblock/${digest}?network=testnet`;
+
+export const getExplorerObjectUrl = (objectId: string): string =>
+  SUI_CHAIN === 'sui:mainnet'
+    ? `https://suiexplorer.com/object/${objectId}?network=mainnet`
+    : `https://suiexplorer.com/object/${objectId}?network=testnet`;
+
+export const NETWORK_LABEL = SUI_CHAIN === 'sui:mainnet' ? 'Mainnet' : 'Testnet';
+

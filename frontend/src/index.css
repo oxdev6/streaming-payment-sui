@@ -56,13 +56,18 @@ body {
    =========================================== */
 
 .card {
-  @apply bg-surface border border-white/10 rounded-2xl p-6;
+  @apply bg-surface/80 backdrop-blur-sm border border-white/[0.08] rounded-2xl p-6;
+  @apply shadow-[0_4px_24px_-4px_rgba(0,0,0,0.4)];
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.card:hover {
+  @apply border-white/[0.12];
 }
 
 .btn-primary {
   @apply bg-gradient-to-r from-cyan to-cyan-dim text-black font-semibold py-3 px-6 rounded-xl;
-  @apply hover:shadow-lg hover:shadow-cyan/30 transition-all duration-200;
-  @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  @apply hover:shadow-[0_0_24px_rgba(0,229,255,0.25)] hover:scale-[1.02] active:scale-[0.98];
+  @apply transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100;
 }
 
 .btn-success {
@@ -78,9 +83,9 @@ body {
 }
 
 .input {
-  @apply w-full bg-deep border border-white/10 rounded-xl px-4 py-3;
-  @apply text-white font-mono focus:outline-none focus:border-cyan/50;
-  @apply placeholder:text-gray-500;
+  @apply w-full bg-deep/80 border border-white/[0.08] rounded-xl px-4 py-3;
+  @apply text-white font-mono focus:outline-none focus:ring-1 focus:ring-cyan/40 focus:border-cyan/40;
+  @apply placeholder:text-gray-500 transition-colors duration-150;
 }
 
 /* ===========================================
@@ -216,4 +221,22 @@ body {
 
 ::selection {
   @apply bg-cyan/30 text-white;
+}
+
+/* ===========================================
+   Professional polish
+   =========================================== */
+
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+}
+
+/* Smooth focus for accessibility */
+*:focus-visible {
+  @apply outline-none ring-2 ring-cyan/50 ring-offset-2 ring-offset-void;
+}
+
+/* Button hover lift */
+button:not(:disabled):active {
+  transform: scale(0.98);
 }
