@@ -40,6 +40,7 @@ export const MOVE_ERROR_MESSAGES: Record<number, string> = {
   3: 'Only the recipient can claim from this stream',
   4: 'Nothing to claim yet — wait for more vesting',
   5: 'Only the sender can cancel this stream',
+  6: 'Invalid cliff: must be between start and end time',
 };
 
 /** Parse Move abort code from error and return user-friendly message */

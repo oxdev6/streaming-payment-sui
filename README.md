@@ -1,13 +1,13 @@
-# 💸 USDCx Streaming Payments
+# Stream Payments
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Stacks-Clarity_2.4-F7931E?style=for-the-badge&logo=bitcoin" alt="Stacks" />
-  <img src="https://img.shields.io/badge/USDCx-Stablecoin-2775CA?style=for-the-badge" alt="USDCx" />
+  <img src="https://img.shields.io/badge/Sui-Move-6fbcf0?style=for-the-badge" alt="Sui" />
+  <img src="https://img.shields.io/badge/React-Vite-61dafb?style=for-the-badge" alt="React" />
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License" />
 </p>
 
 <p align="center">
-  <strong>🌊 Real-time payment streams on Stacks blockchain</strong>
+  <strong>Real-time payment streams on Sui</strong>
 </p>
 
 <p align="center">
@@ -16,275 +16,122 @@
 
 ---
 
-## 🎯 The Problem
+## The Problem
 
 Traditional payments are **all-or-nothing**:
 - Pay employees once a month → they wait 30 days
 - Grant funding released in bulk → no accountability
 - Subscriptions charge upfront → no flexibility
 
-## ✨ The Solution
+## The Solution
 
-**USDCx Streaming** enables continuous, real-time payments:
-- 💼 **Payroll**: Employees earn every second they work
-- 🎯 **Grants**: Funding flows as milestones progress
-- 📺 **Subscriptions**: Pay only for what you use
-- 🤝 **Vesting**: Token unlocks happen continuously
+**Stream Payments** enables continuous, real-time payments on Sui:
+- **Payroll** — Employees earn every second they work
+- **Grants** — Funding flows as milestones progress
+- **Subscriptions** — Pay only for what you use
+- **Vesting** — Token unlocks happen continuously
 
 ---
 
-## 🚀 Quick Start (Sui)
+## Quick Start
 
 ```bash
-# 1. Publish the Move package (get package ID)
+# 1. Publish the Move package
 cd sui
 sui client publish --gas-budget 100000000
 
 # 2. Configure frontend
 cd ../frontend
 cp .env.example .env
-# Edit .env: set VITE_SUI_STREAM_PACKAGE_ID=0x<your_package_id>
+# Edit .env: VITE_SUI_STREAM_PACKAGE_ID=0x<your_package_id>
 
-# 3. Launch frontend
+# 3. Run
 npm install && npm run dev
-
-# 4. Open http://localhost:5173
+# Open http://localhost:5173
 ```
 
-See [docs/QUICK_START_SUI.md](docs/QUICK_START_SUI.md) for a 5-minute setup, or [docs/FRONTEND_SETUP.md](docs/FRONTEND_SETUP.md) for full config.
+See [docs/QUICK_START_SUI.md](docs/QUICK_START_SUI.md) for full setup.
 
 ---
 
-## 🎬 Demo
-
-### Watch Money Flow in Real-Time
-
-1. **Create a stream** → Lock 100 USDCx for 60 seconds
-2. **Watch the progress bar** → Money flows continuously
-3. **Claim anytime** → Recipient withdraws earned funds
-4. **Cancel if needed** → Both parties get fair share
-
----
-
-## 🏗️ Architecture
+## Architecture (Sui)
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│                                                                │
-│    SENDER                                      RECIPIENT       │
-│       │                                            ▲           │
-│       │   create-stream()                         │ claim()   │
-│       │   100 USDCx / 60 blocks                   │           │
-│       ▼                                            │           │
-│   ┌──────────────────────────────────────────────────────────┐ │
-│   │                 usdcx-streaming.clar                     │ │
-│   │                                                          │ │
-│   │   Stream #42                                             │ │
-│   │   ┌────────────────────────────────────┐                 │ │
-│   │   │ sender: ST1ABC...                  │                 │ │
-│   │   │ recipient: ST2XYZ...               │                 │ │
-│   │   │ amount: 100 USDCx                  │                 │ │
-│   │   │ start: block 1000                  │                 │ │
-│   │   │ end: block 1060                    │                 │ │
-│   │   │ withdrawn: 0 → 50 → 100            │                 │ │
-│   │   └────────────────────────────────────┘                 │ │
-│   │                                                          │ │
-│   │   Events: stream-created | stream-claimed | cancelled    │ │
-│   └──────────────────────────────────────────────────────────┘ │
-│                           │                                    │
-│                           ▼                                    │
-│   ┌──────────────────────────────────────────────────────────┐ │
-│   │                 USDCx (SIP-010)                          │ │
-│   └──────────────────────────────────────────────────────────┘ │
-│                                                                │
-└────────────────────────────────────────────────────────────────┘
+SENDER                              RECIPIENT
+   │                                     ▲
+   │  create_stream()                    │ claim()
+   │  coin + start/end                   │
+   ▼                                     │
+┌─────────────────────────────────────────────────┐
+│  streaming_payment::stream (Move)                │
+│  Stream<T> ─────────────────────────────────────│
+│  • sender, recipient, total_amount               │
+│  • withdrawn_amount, start/end_time_ms           │
+│  • optional cliff_time_ms (cliff vesting)        │
+│  • Events: StreamCreated | Claimed | Cancelled   │
+└─────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 streaming-payment/
-├── sui/                        # Sui Move package
-│   ├── sources/
-│   │   └── stream.move         # Streaming payment module
+├── sui/                    # Move package
+│   ├── sources/stream.move  # create_stream, claim, cancel
 │   └── Move.toml
-├── contracts/                  # Stacks Clarity (legacy)
-│   ├── usdcx-streaming.clar
-│   └── mock-usdcx.clar
-├── frontend/
-│   ├── src/
-│   │   ├── App.tsx             # React + Vite + Sui
-│   │   ├── config.sui.ts       # Sui env config
-│   │   └── ...
-│   ├── .env.example            # Copy to .env, set VITE_SUI_*
-│   └── package.json
+├── frontend/                # React + Vite + @mysten/dapp-kit
+│   ├── src/App.tsx
+│   ├── config.sui.ts
+│   └── .env.example
 ├── docs/
+│   ├── QUICK_START_SUI.md
+│   ├── FRONTEND_SETUP.md
 │   ├── sui-architecture.md
-│   ├── FRONTEND_SETUP.md       # Sui frontend config
-│   └── sui-submission/         # Monthly submission data
-│       ├── DEPLOYMENT_DATA.md  # Package ID, tx digests
-│       └── SUBMISSION_CHECKLIST.md
-├── DEPLOY.md
+│   └── sui-submission/
 └── README.md
 ```
 
 ---
 
-## 📜 Smart Contract API
+## Move API
 
-### `create-stream`
+| Function | Description |
+|----------|-------------|
+| `create_stream<T>(recipient, coin, start_ms, end_ms)` | Linear vesting from start to end |
+| `create_stream_with_cliff<T>(recipient, coin, start_ms, cliff_ms, end_ms)` | Cliff vesting: no vest until cliff, then linear to end |
+| `claim<T>(stream, clock)` | Recipient withdraws vested funds |
+| `cancel<T>(stream, clock)` | Sender cancels; recipient keeps vested, sender refunded |
 
-```clarity
-(create-stream stream-id recipient amount duration token)
-```
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `stream-id` | `uint` | Unique identifier |
-| `recipient` | `principal` | Who receives funds |
-| `amount` | `uint` | Total amount (6 decimals) |
-| `duration` | `uint` | Blocks until complete |
-| `token` | `ft-trait` | SIP-010 token |
-
-### `claim`
-
-```clarity
-(claim stream-id token)
-```
-
-Recipient withdraws all vested (earned) funds.
-
-### `cancel-stream`
-
-```clarity
-(cancel-stream stream-id token)
-```
-
-Sender cancels. Recipient keeps vested, sender gets refund.
-
-### Read-Only Functions
-
-| Function | Returns |
-|----------|---------|
-| `(get-stream id)` | Full stream data |
-| `(get-claimable id)` | Available to claim |
-| `(get-vested id)` | Total unlocked |
-| `(get-progress id)` | 0-100% complete |
-| `(get-total-streams)` | Analytics counter |
+Error codes: see [docs/sui-architecture.md](docs/sui-architecture.md#move-error-codes-streammove).
 
 ---
 
-## 🧪 Testing
-
-```bash
-clarinet test
-```
-
-**Coverage:**
-- ✅ Create stream (valid + invalid params)
-- ✅ Claim (partial, multiple, full)
-- ✅ Cancel (mid-stream, after claims)
-- ✅ Authorization checks
-- ✅ Full lifecycle test
-
----
-
-## 🎨 Frontend Features
+## Frontend Features
 
 | Feature | Description |
 |---------|-------------|
-| 🔌 Wallet Connect | Hiro Wallet / Xverse |
-| 📊 Real-time Progress | Updates every 100ms |
-| 💰 One-click Claim | Instant fund withdrawal |
-| 📈 Live Stats | Balance, streamed, active |
-| 🌙 Dark Theme | Professional UI |
-| 📱 Responsive | Works on mobile |
+| Sui Wallet Connect | Sui Wallet, Suiet, Ethos, Surf |
+| Real-time progress | Live vesting progress per stream |
+| One-click claim / cancel | Claim vested funds, cancel and refund |
+| Presets | Amount and duration presets per use case |
+| Stream history | View completed and cancelled streams |
+| Error messages | Move error codes mapped to user-friendly text |
 
 ---
 
-## 🚀 Deployment
-
-### Testnet
-
-```bash
-# 1. Get testnet STX
-# Visit: https://explorer.hiro.so/sandbox/faucet?chain=testnet
-
-# 2. Deploy
-clarinet deployments apply --testnet
-
-# 3. Update frontend
-# Edit CONTRACT_ADDRESS in frontend/src/App.tsx
-```
-
-See `DEPLOY.md` for detailed instructions.
-
----
-
-## 🔐 Security
+## Security
 
 | Check | Status |
 |-------|--------|
 | Only recipient can claim | ✅ |
 | Only sender can cancel | ✅ |
 | Cannot over-claim | ✅ |
-| Safe math (no overflow) | ✅ |
 | Event logging | ✅ |
-| No reentrancy (Clarity) | ✅ |
 
 ---
 
-## 💡 Error Codes
+## License
 
-| Code | Meaning |
-|------|---------|
-| `u100` | Stream ID already exists |
-| `u101` | Invalid duration |
-| `u102` | Transfer failed |
-| `u103` | Not the recipient |
-| `u104` | Nothing to claim |
-| `u105` | Claim failed |
-| `u106` | Stream not found |
-| `u107` | Not the sender |
-| `u108` | Refund failed |
-| `u109` | Invalid amount |
-| `u110` | Cannot stream to self |
-
----
-
-## 🗺️ Roadmap
-
-- [x] Core streaming contract
-- [x] SIP-010 integration
-- [x] React frontend
-- [x] Wallet connection
-- [ ] Cliff vesting
-- [ ] Multi-recipient streams
-- [ ] Stream NFT receipts
-- [ ] Mainnet deployment
-
----
-
-## 🏆 Built For
-
-<p align="center">
-  <strong>Stacks Hackathon 2024</strong>
-</p>
-
-<p align="center">
-  Demonstrating programmatic USDCx control with real-time payment streaming.
-</p>
-
----
-
-## 📄 License
-
-MIT — use it, fork it, build on it.
-
----
-
-<p align="center">
-  <strong>Built with 💜 for the Stacks ecosystem</strong>
-</p>
+MIT

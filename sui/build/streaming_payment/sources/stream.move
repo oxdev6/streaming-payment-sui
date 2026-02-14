@@ -8,8 +8,9 @@ module streaming_payment::stream {
 
     /// A time-based streaming payment between a sender and a recipient.
     ///
-    /// All funds are stored inside the `coin` field and are linearly vested
-    /// between `start_time_ms` and `end_time_ms`.
+    /// All funds are stored inside the `coin` field. Vesting is linear from
+    /// `cliff_time_ms` to `end_time_ms`; before cliff, vested amount is 0.
+    /// When cliff == start, this is linear vesting (no cliff).
     ///
     /// Generic over the coin type `T`.
     public struct Stream<phantom T> has key {
@@ -19,6 +20,7 @@ module streaming_payment::stream {
         total_amount: u64,
         withdrawn_amount: u64,
         start_time_ms: u64,
+        cliff_time_ms: u64,
         end_time_ms: u64,
         coin: Coin<T>,
     }
@@ -47,14 +49,40 @@ module streaming_payment::stream {
         sender_refunded: u64,
     }
 
-    /// Create a new streaming payment.
+    /// Create a new streaming payment (linear vesting, no cliff).
     ///
-    /// All coins provided are locked into the created `Stream` object and
-    /// will vest linearly between `start_time_ms` and `end_time_ms`.
+    /// All coins vest linearly between `start_time_ms` and `end_time_ms`.
     public entry fun create_stream<T>(
         recipient: address,
         coin_in: Coin<T>,
         start_time_ms: u64,
+        end_time_ms: u64,
+        ctx: &mut TxContext,
+    ) {
+        create_stream_with_cliff_internal(recipient, coin_in, start_time_ms, start_time_ms, end_time_ms, ctx);
+    }
+
+    /// Create a new streaming payment with cliff vesting.
+    ///
+    /// No vesting until `cliff_time_ms`; linear vesting from cliff to `end_time_ms`.
+    /// Requires `start_time_ms <= cliff_time_ms <= end_time_ms`.
+    public entry fun create_stream_with_cliff<T>(
+        recipient: address,
+        coin_in: Coin<T>,
+        start_time_ms: u64,
+        cliff_time_ms: u64,
+        end_time_ms: u64,
+        ctx: &mut TxContext,
+    ) {
+        assert!(start_time_ms <= cliff_time_ms && cliff_time_ms <= end_time_ms, 6);
+        create_stream_with_cliff_internal(recipient, coin_in, start_time_ms, cliff_time_ms, end_time_ms, ctx);
+    }
+
+    fun create_stream_with_cliff_internal<T>(
+        recipient: address,
+        coin_in: Coin<T>,
+        start_time_ms: u64,
+        cliff_time_ms: u64,
         end_time_ms: u64,
         ctx: &mut TxContext,
     ) {
@@ -71,6 +99,7 @@ module streaming_payment::stream {
             total_amount,
             withdrawn_amount: 0,
             start_time_ms,
+            cliff_time_ms,
             end_time_ms,
             coin: coin_in,
         };
@@ -134,13 +163,14 @@ module streaming_payment::stream {
             recipient,
             total_amount,
             withdrawn_amount,
-            start_time_ms,
+            start_time_ms: _,
+            cliff_time_ms,
             end_time_ms,
             mut coin,
         } = stream;
 
         let now = clock::timestamp_ms(clock);
-        let vested = vested_amount_internal(total_amount, start_time_ms, end_time_ms, now);
+        let vested = vested_amount_internal(total_amount, cliff_time_ms, end_time_ms, now);
         let claimable = claimable_amount_internal(vested, withdrawn_amount);
         let vested_total = withdrawn_amount + claimable;
         let refund = total_amount - vested_total;
@@ -175,7 +205,7 @@ module streaming_payment::stream {
 
     /// Compute the vested amount at a given timestamp.
     public fun vested_amount<T>(stream: &Stream<T>, now_ms: u64): u64 {
-        vested_amount_internal(stream.total_amount, stream.start_time_ms, stream.end_time_ms, now_ms)
+        vested_amount_internal(stream.total_amount, stream.cliff_time_ms, stream.end_time_ms, now_ms)
     }
 
     /// Compute the claimable amount given a vested amount.
@@ -183,23 +213,23 @@ module streaming_payment::stream {
         claimable_amount(stream, vested)
     }
 
-    /// Internal helper to compute vested amount.
+    /// Internal helper: vesting from cliff to end. Before cliff, 0. After end, total.
     fun vested_amount_internal(
         total_amount: u64,
-        start_time_ms: u64,
+        cliff_time_ms: u64,
         end_time_ms: u64,
         now_ms: u64,
     ): u64 {
-        if (now_ms <= start_time_ms) {
+        if (now_ms < cliff_time_ms) {
             0
         } else if (now_ms >= end_time_ms) {
             total_amount
         } else {
-            let duration = end_time_ms - start_time_ms;
+            let duration = end_time_ms - cliff_time_ms;
             if (duration == 0) {
                 total_amount
             } else {
-                let elapsed = now_ms - start_time_ms;
+                let elapsed = now_ms - cliff_time_ms;
                 total_amount * elapsed / duration
             }
         }

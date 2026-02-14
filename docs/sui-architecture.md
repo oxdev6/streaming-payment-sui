@@ -158,4 +158,5 @@ Future extensions:
 | 3 | claim | Caller is not the stream recipient |
 | 4 | claim | Nothing to claim yet (claimable amount is zero) |
 | 5 | cancel | Caller is not the stream sender |
+| 6 | create_stream_with_cliff | Invalid cliff: `start_time_ms <= cliff_time_ms <= end_time_ms` required |
 

@@ -130,6 +130,8 @@ interface Stream {
   tokenSymbol: string;
 }
 
+type PastStream = Stream & { status: "completed" | "cancelled" };
+
 // ===========================================
 // Helpers
 // ===========================================
@@ -160,6 +162,7 @@ export default function App() {
   const suiClient = useSuiClient();
   const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const [streams, setStreams] = useState<Stream[]>([]);
+  const [pastStreams, setPastStreams] = useState<PastStream[]>([]);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: string } | null>(null);
   const location = useLocation();
@@ -182,16 +185,20 @@ export default function App() {
 
   // Page-specific config: labels, presets, copy
   const pageConfig = useMemo(() => {
-    const configs: Record<PageId, { recipientLabel: string; amountLabel: string; createBtn: string; durationOptions: { value: string; label: string }[]; emptyTitle: string; emptyHint: string; rateLabel: string }> = {
+    const configs: Record<PageId, {
+      recipientLabel: string; amountLabel: string; createBtn: string;
+      durationOptions: { value: string; label: string }[];
+      amountPresets: { value: string; label: string }[];
+      durationPresets: { value: string; label: string }[];
+      emptyTitle: string; emptyHint: string; rateLabel: string;
+    }> = {
       home: {
         recipientLabel: "Recipient (Sui address)",
         amountLabel: "Amount",
         createBtn: "Create Stream",
-        durationOptions: [
-          { value: "30", label: "30s" },
-          { value: "60", label: "1m" },
-          { value: "120", label: "2m" },
-        ],
+        durationOptions: [{ value: "30", label: "30s" }, { value: "60", label: "1m" }, { value: "120", label: "2m" }],
+        amountPresets: [{ value: "50", label: "50" }, { value: "100", label: "100" }, { value: "200", label: "200" }],
+        durationPresets: [{ value: "30", label: "30s" }, { value: "60", label: "1m" }, { value: "120", label: "2m" }],
         emptyTitle: "No streams yet",
         emptyHint: "Create a stream or run a quick demo",
         rateLabel: "Rate",
@@ -201,13 +208,11 @@ export default function App() {
         amountLabel: "Salary amount",
         createBtn: "Create Payroll Stream",
         durationOptions: [
-          { value: "30", label: "30s" },
-          { value: "60", label: "1m" },
-          { value: "300", label: "5m" },
-          { value: "3600", label: "1 hour" },
-          { value: "86400", label: "1 day" },
-          { value: "604800", label: "1 week" },
+          { value: "30", label: "30s" }, { value: "60", label: "1m" }, { value: "300", label: "5m" },
+          { value: "3600", label: "1 hour" }, { value: "86400", label: "1 day" }, { value: "604800", label: "1 week" },
         ],
+        amountPresets: [{ value: "50", label: "50" }, { value: "100", label: "100" }, { value: "500", label: "500" }, { value: "1000", label: "1k" }],
+        durationPresets: [{ value: "3600", label: "1hr" }, { value: "86400", label: "1d" }, { value: "604800", label: "1w" }],
         emptyTitle: "No payroll streams",
         emptyHint: "Start streaming salary to an employee",
         rateLabel: "Pay rate",
@@ -217,12 +222,11 @@ export default function App() {
         amountLabel: "Grant amount",
         createBtn: "Create Grant Stream",
         durationOptions: [
-          { value: "30", label: "30s" },
-          { value: "60", label: "1m" },
-          { value: "86400", label: "1 day" },
-          { value: "604800", label: "1 week" },
-          { value: "2592000", label: "30 days" },
+          { value: "30", label: "30s" }, { value: "60", label: "1m" }, { value: "86400", label: "1 day" },
+          { value: "604800", label: "1 week" }, { value: "2592000", label: "30 days" },
         ],
+        amountPresets: [{ value: "100", label: "100" }, { value: "500", label: "500" }, { value: "1000", label: "1k" }, { value: "5000", label: "5k" }],
+        durationPresets: [{ value: "604800", label: "7d" }, { value: "2592000", label: "30d" }],
         emptyTitle: "No grant streams",
         emptyHint: "Release grant funding over time",
         rateLabel: "Release rate",
@@ -232,12 +236,11 @@ export default function App() {
         amountLabel: "Subscription amount",
         createBtn: "Create Subscription Stream",
         durationOptions: [
-          { value: "30", label: "30s" },
-          { value: "60", label: "1m" },
-          { value: "3600", label: "1 hour" },
-          { value: "86400", label: "1 day" },
-          { value: "604800", label: "1 week" },
+          { value: "30", label: "30s" }, { value: "60", label: "1m" }, { value: "3600", label: "1 hour" },
+          { value: "86400", label: "1 day" }, { value: "604800", label: "1 week" },
         ],
+        amountPresets: [{ value: "10", label: "10" }, { value: "50", label: "50" }, { value: "100", label: "100" }, { value: "500", label: "500" }],
+        durationPresets: [{ value: "86400", label: "1d" }, { value: "604800", label: "1w" }, { value: "2592000", label: "1mo" }],
         emptyTitle: "No subscription streams",
         emptyHint: "Start a pay-as-you-use subscription",
         rateLabel: "Usage rate",
@@ -247,12 +250,11 @@ export default function App() {
         amountLabel: "Token amount",
         createBtn: "Create Vesting Stream",
         durationOptions: [
-          { value: "30", label: "30s" },
-          { value: "60", label: "1m" },
-          { value: "86400", label: "1 day" },
-          { value: "604800", label: "1 week" },
-          { value: "2592000", label: "30 days" },
+          { value: "30", label: "30s" }, { value: "60", label: "1m" }, { value: "86400", label: "1 day" },
+          { value: "604800", label: "1 week" }, { value: "2592000", label: "30 days" },
         ],
+        amountPresets: [{ value: "1000", label: "1k" }, { value: "5000", label: "5k" }, { value: "10000", label: "10k" }, { value: "50000", label: "50k" }],
+        durationPresets: [{ value: "2592000", label: "30d" }, { value: "7776000", label: "90d" }, { value: "15552000", label: "180d" }],
         emptyTitle: "No vesting streams",
         emptyHint: "Stream tokens with linear vesting",
         rateLabel: "Vest rate",
@@ -392,7 +394,7 @@ export default function App() {
 
   const claimDemoStream = (id: number) => {
     console.log("Claiming stream:", id);
-    
+
     const stream = streams.find((s) => s.streamId === id);
     if (!stream) {
       showToast("Stream not found", "error");
@@ -405,11 +407,19 @@ export default function App() {
       return;
     }
 
-    setStreams(prev =>
-      prev.map((s) =>
-        s.streamId === id ? { ...s, withdrawn: s.withdrawn + claimable } : s
-      )
-    );
+    const newWithdrawn = stream.withdrawn + claimable;
+    const isComplete = newWithdrawn >= stream.amount;
+
+    if (isComplete) {
+      setStreams(prev => prev.filter((s) => s.streamId !== id));
+      setPastStreams(prev => [{ ...stream, withdrawn: newWithdrawn, status: "completed" as const }, ...prev].slice(0, 20));
+    } else {
+      setStreams(prev =>
+        prev.map((s) =>
+          s.streamId === id ? { ...s, withdrawn: newWithdrawn } : s
+        )
+      );
+    }
     const token = stream.tokenSymbol || selectedToken.symbol;
     showToast(`Claimed ${formatAmount(claimable)} ${token}!`, "success");
     addEvent(`Claimed ${formatAmount(claimable)} ${token} from Stream #${id}`, "claim");
@@ -417,7 +427,7 @@ export default function App() {
 
   const cancelDemoStream = (id: number) => {
     console.log("Cancelling stream:", id);
-    
+
     const stream = streams.find((s) => s.streamId === id);
     if (!stream) {
       showToast("Stream not found", "error");
@@ -429,6 +439,7 @@ export default function App() {
     const refund = stream.amount - vested;
 
     setStreams(prev => prev.filter((s) => s.streamId !== id));
+    setPastStreams(prev => [{ ...stream, status: "cancelled" as const }, ...prev].slice(0, 20));
     setBalance(prev => prev + refund / 1_000_000);
     const token = stream.tokenSymbol || selectedToken.symbol;
     showToast(`Refunded ${formatAmount(refund)} ${token}`, "success");
@@ -1050,6 +1061,26 @@ export default function App() {
                     />
                     <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-xs">{selectedToken.symbol}</span>
                   </div>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {pageConfig.amountPresets.map((p) => (
+                      <button
+                        key={p.value}
+                        type="button"
+                        onClick={() => {
+                          setAmount(p.value);
+                          if (currentPage === "payroll") {
+                            const hrs = parseInt(duration || "3600") / 3600;
+                            setHourlyRate((parseFloat(p.value) / hrs).toFixed(2));
+                          } else if (currentPage === "subscriptions") setSubAmount(p.value);
+                        }}
+                        className={`text-[10px] px-2 py-0.5 rounded-lg transition cursor-pointer ${
+                          amount === p.value ? "bg-cyan/30 text-cyan" : "bg-white/5 hover:bg-white/10 text-gray-400"
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Token</label>
@@ -1075,9 +1106,9 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   <div>
                     <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Duration</label>
-                    <select 
+                    <select
                       aria-label="Select duration"
-                      value={duration} 
+                      value={duration}
                       onChange={(e) => {
                         const d = e.target.value;
                         setDuration(d);
@@ -1085,19 +1116,65 @@ export default function App() {
                           const hrs = parseInt(d) / 3600;
                           setAmount((parseFloat(hourlyRate) * hrs).toFixed(2));
                         }
-                      }} 
+                      }}
                       className="input py-2 text-sm"
                     >
                       {pageConfig.durationOptions.map((opt) => (
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
                       ))}
                     </select>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {pageConfig.durationPresets.map((p) => (
+                        <button
+                          key={p.value}
+                          type="button"
+                          onClick={() => {
+                            setDuration(p.value);
+                            if (currentPage === "payroll") {
+                              const hrs = parseInt(p.value) / 3600;
+                              setAmount((parseFloat(hourlyRate) * hrs).toFixed(2));
+                            }
+                          }}
+                          className={`text-[10px] px-2 py-0.5 rounded-lg transition cursor-pointer ${
+                            duration === p.value ? "bg-cyan/30 text-cyan" : "bg-white/5 hover:bg-white/10 text-gray-400"
+                          }`}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
               {(currentPage === "grants" || currentPage === "subscriptions" || currentPage === "vesting") && (
-                <div className="text-[10px] text-gray-500">
-                  Duration: {parseInt(duration) < 86400 ? `${parseInt(duration)}s` : `${Math.round(parseInt(duration) / 86400)} days`}
+                <div className="mt-2">
+                  <div className="text-[10px] text-gray-500 mb-1">Duration presets</div>
+                  <div className="flex flex-wrap gap-1">
+                    {pageConfig.durationPresets.map((p) => {
+                      const days = Math.round(parseInt(p.value) / 86400);
+                      return (
+                        <button
+                          key={p.value}
+                          type="button"
+                          onClick={() => {
+                            setDuration(p.value);
+                            if (currentPage === "grants") setGrantDays(days.toString());
+                            if (currentPage === "vesting") setVestDays(days.toString());
+                            if (currentPage === "subscriptions") {
+                              if (p.value === "86400") setSubCycle("day");
+                              else if (p.value === "604800") setSubCycle("week");
+                              else if (p.value === "2592000") setSubCycle("month");
+                            }
+                          }}
+                          className={`text-[10px] px-2 py-0.5 rounded-lg transition cursor-pointer ${
+                            duration === p.value ? "bg-cyan/30 text-cyan" : "bg-white/5 hover:bg-white/10 text-gray-400"
+                          }`}
+                        >
+                          {p.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
@@ -1248,6 +1325,39 @@ export default function App() {
               </div>
             )}
           </div>
+
+          {/* Past Streams */}
+          {pastStreams.length > 0 && (
+            <div className="lg:col-span-2 card p-4 mt-4">
+              <h2 className="text-sm font-semibold mb-3 flex items-center gap-2 text-gray-300">
+                <span className="w-6 h-6 bg-gradient-to-br from-gray-500/20 to-gray-600/20 rounded-lg flex items-center justify-center p-1 text-gray-400">{Icons.log}</span>
+                Past Streams
+                <span className="ml-auto text-[10px] bg-gray-500/20 text-gray-400 px-2 py-0.5 rounded-full font-mono">
+                  {pastStreams.length}
+                </span>
+              </h2>
+              <div className="space-y-2 max-h-32 overflow-y-auto">
+                {pastStreams.map((ps) => (
+                  <div key={ps.streamId} className="flex items-center justify-between py-2 px-3 bg-deep rounded-lg border border-white/5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-cyan text-sm">#{ps.streamId}</span>
+                      <span className="text-[10px] text-gray-500">{formatAddress(ps.recipient)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-gray-400">
+                        {formatAmount(ps.withdrawn)} / {formatAmount(ps.amount)} {ps.tokenSymbol}
+                      </span>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                        ps.status === "completed" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                      }`}>
+                        {ps.status === "completed" ? "Done" : "Cancelled"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Event Log */}
