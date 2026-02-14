@@ -53,7 +53,17 @@ npm run dev
 
 Open **http://localhost:5173**. Connect your wallet, create a stream, and claim.
 
+## Mainnet deployment
+
+1. Switch Sui CLI to mainnet: `sui client switch env mainnet` (or configure `~/.sui/sui_config.yaml`)
+2. Ensure you have mainnet SUI for gas
+3. Publish: `cd sui && sui client publish --gas-budget 100000000`
+4. Set in `.env`: `VITE_SUI_CHAIN=sui:mainnet` and `VITE_SUI_STREAM_PACKAGE_ID=0x<new_package_id>`
+
+See [MAINNET_DEPLOY.md](./MAINNET_DEPLOY.md) for full steps.
+
 ## Links
 
 - [Full frontend setup](./FRONTEND_SETUP.md)
+- [Mainnet deployment](./MAINNET_DEPLOY.md)
 - [Deployment data](./sui-submission/DEPLOYMENT_DATA.md)

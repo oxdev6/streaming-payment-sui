@@ -101,7 +101,9 @@ streaming-payment/
 |----------|-------------|
 | `create_stream<T>(recipient, coin, start_ms, end_ms)` | Linear vesting from start to end |
 | `create_stream_with_cliff<T>(recipient, coin, start_ms, cliff_ms, end_ms)` | Cliff vesting: no vest until cliff, then linear to end |
+| `create_streams_batch<T>(recipients, amounts, coin, start_ms, end_ms)` | Create multiple streams in one tx |
 | `claim<T>(stream, clock)` | Recipient withdraws vested funds |
+| `claim_receipt<T>(stream)` | Recipient claims StreamReceipt NFT when fully withdrawn |
 | `cancel<T>(stream, clock)` | Sender cancels; recipient keeps vested, sender refunded |
 
 Error codes: see [docs/sui-architecture.md](docs/sui-architecture.md#move-error-codes-streammove).

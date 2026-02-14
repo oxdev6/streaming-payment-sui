@@ -5,6 +5,7 @@ module streaming_payment::stream {
     use sui::object::{Self as object, UID};
     use sui::tx_context::{Self as tx_context, TxContext};
     use sui::transfer;
+    use std::vector;
 
     /// A time-based streaming payment between a sender and a recipient.
     ///
@@ -49,6 +50,14 @@ module streaming_payment::stream {
         sender_refunded: u64,
     }
 
+    /// NFT receipt proving full completion of a stream. One per completed stream.
+    public struct StreamReceipt<phantom T> has key, store {
+        id: UID,
+        recipient: address,
+        total_amount: u64,
+        end_time_ms: u64,
+    }
+
     /// Create a new streaming payment (linear vesting, no cliff).
     ///
     /// All coins vest linearly between `start_time_ms` and `end_time_ms`.
@@ -76,6 +85,42 @@ module streaming_payment::stream {
     ) {
         assert!(start_time_ms <= cliff_time_ms && cliff_time_ms <= end_time_ms, 6);
         create_stream_with_cliff_internal(recipient, coin_in, start_time_ms, cliff_time_ms, end_time_ms, ctx);
+    }
+
+    /// Create multiple streams in one transaction.
+    /// Splits `coin_in` by `amounts` and creates one stream per (recipients[i], amounts[i]).
+    /// Requires `recipients.length == amounts.length`, sum(amounts) == coin value, all amounts > 0.
+    public entry fun create_streams_batch<T>(
+        recipients: vector<address>,
+        amounts: vector<u64>,
+        mut coin_in: Coin<T>,
+        start_time_ms: u64,
+        end_time_ms: u64,
+        ctx: &mut TxContext,
+    ) {
+        let len = vector::length(&recipients);
+        assert!(len == vector::length(&amounts) && len > 0, 9);
+        assert!(end_time_ms > start_time_ms, 1);
+        let total = coin::value(&coin_in);
+        let mut sum = 0u64;
+        let mut i = 0u64;
+        while (i < len) {
+            let amt = *vector::borrow(&amounts, i);
+            assert!(amt > 0, 2);
+            sum = sum + amt;
+            i = i + 1;
+        };
+        assert!(sum == total, 10);
+
+        i = 0;
+        while (i < len) {
+            let amt = *vector::borrow(&amounts, i);
+            let rec = *vector::borrow(&recipients, i);
+            let coin_part = coin::split(&mut coin_in, amt, ctx);
+            create_stream_with_cliff_internal(rec, coin_part, start_time_ms, start_time_ms, end_time_ms, ctx);
+            i = i + 1;
+        };
+        coin::destroy_zero(coin_in);
     }
 
     fun create_stream_with_cliff_internal<T>(
@@ -142,6 +187,42 @@ module streaming_payment::stream {
             claimed_amount: claimable,
             total_withdrawn: stream.withdrawn_amount,
         });
+    }
+
+    /// Claim the StreamReceipt NFT when stream is fully withdrawn.
+    /// Only the recipient may call. Stream must have withdrawn_amount == total_amount.
+    public entry fun claim_receipt<T>(
+        stream: Stream<T>,
+        ctx: &mut TxContext,
+    ) {
+        let caller = tx_context::sender(ctx);
+        assert!(caller == stream.recipient, 3);
+        assert!(stream.withdrawn_amount == stream.total_amount, 7);
+
+        let Stream {
+            id,
+            sender: _,
+            recipient,
+            total_amount,
+            withdrawn_amount: _,
+            start_time_ms: _,
+            cliff_time_ms: _,
+            end_time_ms,
+            coin,
+        } = stream;
+
+        assert!(coin::value(&coin) == 0, 8);
+
+        let receipt = StreamReceipt<T> {
+            id: object::new(ctx),
+            recipient,
+            total_amount,
+            end_time_ms,
+        };
+
+        transfer::transfer(receipt, recipient);
+        coin::destroy_zero(coin);
+        object::delete(id);
     }
 
     /// Cancel a stream.

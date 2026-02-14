@@ -12,6 +12,7 @@ import {
   SUI_STREAM_MODULE,
   SUI_STREAM_PACKAGE_ID,
   TOKEN_COIN_TYPES,
+  getUSDCCoinType,
   SUI_CLOCK_OBJECT_ID,
   getExplorerTxUrl,
   getExplorerObjectUrl,
@@ -265,11 +266,12 @@ export default function App() {
 
   const [onchainStreamId, setOnchainStreamId] = useState<string>("");
 
-  // Token selection (simple demo: USDCx, USDT, SUI)
+  // Token selection
   const tokenOptions = [
-    { id: "USDCX", label: "USDCx (stable)", symbol: "USDCx" },
-    { id: "USDT", label: "USDT (stable)", symbol: "USDT" },
+    { id: "USDCX", label: "USDCx (demo)", symbol: "USDCx" },
+    { id: "USDT", label: "USDT (demo)", symbol: "USDT" },
     { id: "SUI", label: "SUI", symbol: "SUI" },
+    { id: "USDC", label: "USDC", symbol: "USDC" },
   ] as const;
 
   type TokenOption = (typeof tokenOptions)[number];
@@ -474,7 +476,7 @@ export default function App() {
     setShowIntro(false);
   };
 
-  const handleCreateStream = () => {
+  const handleCreateStream = async () => {
     console.log("Create stream button clicked");
 
     // If on-chain config or wallet is missing, fall back to demo mode.
@@ -498,9 +500,10 @@ export default function App() {
       return;
     }
 
-    // For now we only support real on-chain streaming for SUI token.
-    if (selectedToken.id !== "SUI") {
-      showToast("On-chain streaming is currently enabled for SUI only. Using demo mode for other tokens.", "error");
+    const isSUI = selectedToken.id === "SUI";
+    const isUSDC = selectedToken.id === "USDC";
+    if (!isSUI && !isUSDC) {
+      showToast("On-chain streaming supports SUI and USDC. Using demo mode.", "error");
       createDemoStream();
       return;
     }
@@ -514,11 +517,28 @@ export default function App() {
       const startTimeMs = BigInt(nowMs);
       const endTimeMs = BigInt(nowMs + dur * 1000);
 
-      const [streamCoin] = tx.splitCoins(tx.gas, [amountMicro]);
+      let streamCoin;
+      if (isSUI) {
+        [streamCoin] = tx.splitCoins(tx.gas, [amountMicro]);
+      } else {
+        const coinType = getUSDCCoinType();
+        const coins = await suiClient.getCoins({
+          owner: currentAccount.address,
+          coinType,
+        });
+        const enough = coins.data.find((c) => BigInt(c.balance) >= amountMicro);
+        if (!enough) {
+          showToast("Insufficient USDC balance. Get testnet USDC from Circle faucet.", "error");
+          setLoading(false);
+          return;
+        }
+        [streamCoin] = tx.splitCoins(tx.object(enough.coinObjectId), [amountMicro]);
+      }
 
+      const coinTypeArg = isSUI ? TOKEN_COIN_TYPES.SUI : getUSDCCoinType();
       tx.moveCall({
         target: `${SUI_STREAM_PACKAGE_ID}::${SUI_STREAM_MODULE}::create_stream`,
-        typeArguments: [TOKEN_COIN_TYPES.SUI],
+        typeArguments: [coinTypeArg],
         arguments: [
           tx.pure.address(recipient),
           streamCoin,
@@ -601,7 +621,7 @@ export default function App() {
   // On-chain Claim / Cancel (Sui)
   // ===========================================
 
-  const handleOnchainAction = (kind: "claim" | "cancel") => {
+  const handleOnchainAction = (kind: "claim" | "cancel" | "receipt") => {
     if (!onchainStreamId || onchainStreamId.length < 5) {
       showToast("Enter a valid on-chain Stream object ID", "error");
       return;
@@ -615,14 +635,23 @@ export default function App() {
       setLoading(true);
       const tx = new Transaction();
 
-      tx.moveCall({
-        target: `${SUI_STREAM_PACKAGE_ID}::${SUI_STREAM_MODULE}::${kind}`,
-        typeArguments: [TOKEN_COIN_TYPES.SUI],
-        arguments: [
-          tx.object(onchainStreamId),
-          tx.object(SUI_CLOCK_OBJECT_ID),
-        ],
-      });
+      const coinTypeArg = selectedToken.id === "USDC" ? getUSDCCoinType() : TOKEN_COIN_TYPES.SUI;
+      if (kind === "receipt") {
+        tx.moveCall({
+          target: `${SUI_STREAM_PACKAGE_ID}::${SUI_STREAM_MODULE}::claim_receipt`,
+          typeArguments: [coinTypeArg],
+          arguments: [tx.object(onchainStreamId)],
+        });
+      } else {
+        tx.moveCall({
+          target: `${SUI_STREAM_PACKAGE_ID}::${SUI_STREAM_MODULE}::${kind}`,
+          typeArguments: [coinTypeArg],
+          arguments: [
+            tx.object(onchainStreamId),
+            tx.object(SUI_CLOCK_OBJECT_ID),
+          ],
+        });
+      }
 
       signAndExecuteTransaction(
         {
@@ -633,7 +662,7 @@ export default function App() {
         {
           onSuccess: (result: any) => {
             const digest = result?.digest ?? "";
-            const label = kind === "claim" ? "Claim" : "Cancel";
+            const label = kind === "claim" ? "Claim" : kind === "receipt" ? "Receipt" : "Cancel";
             showToast(
               `${label} TX submitted: ${digest ? digest.slice(0, 10) + "..." : "ok"}`,
               "success",
@@ -1243,20 +1272,29 @@ export default function App() {
                   View on Suiexplorer <span className="w-3 h-3">{Icons.external}</span>
                 </a>
               )}
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => handleOnchainAction("claim")}
                   disabled={loading}
-                  className="flex-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 text-[11px] font-semibold py-1.5 px-2 rounded-lg transition cursor-pointer disabled:cursor-not-allowed"
+                  className="flex-1 min-w-[90px] bg-green-500/20 hover:bg-green-500/30 text-green-400 text-[11px] font-semibold py-1.5 px-2 rounded-lg transition cursor-pointer disabled:cursor-not-allowed"
                 >
                   On-chain Claim
                 </button>
                 <button
                   type="button"
+                  onClick={() => handleOnchainAction("receipt")}
+                  disabled={loading}
+                  className="flex-1 min-w-[90px] bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 text-[11px] font-semibold py-1.5 px-2 rounded-lg transition cursor-pointer disabled:cursor-not-allowed"
+                  title="Claim NFT receipt when stream is fully withdrawn"
+                >
+                  Claim Receipt
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleOnchainAction("cancel")}
                   disabled={loading}
-                  className="flex-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 text-[11px] font-semibold py-1.5 px-2 rounded-lg transition cursor-pointer disabled:cursor-not-allowed"
+                  className="flex-1 min-w-[90px] bg-red-500/20 hover:bg-red-500/30 text-red-400 text-[11px] font-semibold py-1.5 px-2 rounded-lg transition cursor-pointer disabled:cursor-not-allowed"
                 >
                   On-chain Cancel
                 </button>
