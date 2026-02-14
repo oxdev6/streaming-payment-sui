@@ -33,3 +33,26 @@ export const getExplorerObjectUrl = (objectId: string): string =>
 
 export const NETWORK_LABEL = SUI_CHAIN === 'sui:mainnet' ? 'Mainnet' : 'Testnet';
 
+// Move error codes (stream.move) → user-facing messages
+export const MOVE_ERROR_MESSAGES: Record<number, string> = {
+  1: 'Invalid duration: end time must be after start time',
+  2: 'Invalid amount: must be greater than zero',
+  3: 'Only the recipient can claim from this stream',
+  4: 'Nothing to claim yet — wait for more vesting',
+  5: 'Only the sender can cancel this stream',
+};
+
+/** Parse Move abort code from error and return user-friendly message */
+export function getMoveErrorMessage(error: unknown, fallback: string): string {
+  const msg = String(error ?? '');
+  // Sui errors may contain "with code N" or "1" or similar patterns
+  const codeMatch = msg.match(/with code (\d+)/i) || msg.match(/\b(?:E)?(\d{1,2})\b/);
+  const code = codeMatch ? parseInt(codeMatch[1], 10) : null;
+  if (code != null && MOVE_ERROR_MESSAGES[code]) {
+    return MOVE_ERROR_MESSAGES[code];
+  }
+  return fallback;
+}
+
+export const MIN_DURATION_SECONDS = 10;
+

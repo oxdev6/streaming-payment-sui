@@ -16,6 +16,8 @@ import {
   getExplorerTxUrl,
   getExplorerObjectUrl,
   NETWORK_LABEL,
+  getMoveErrorMessage,
+  MIN_DURATION_SECONDS,
 } from "./config.sui";
 
 // ===========================================
@@ -367,6 +369,10 @@ export default function App() {
       showToast("Enter recipient address", "error");
       return;
     }
+    if (dur < MIN_DURATION_SECONDS) {
+      showToast(`Duration must be at least ${MIN_DURATION_SECONDS} seconds`, "error");
+      return;
+    }
 
     const newStream: Stream = {
       streamId: id,
@@ -472,6 +478,10 @@ export default function App() {
       showToast("Enter a valid amount and duration", "error");
       return;
     }
+    if (dur < MIN_DURATION_SECONDS) {
+      showToast(`Duration must be at least ${MIN_DURATION_SECONDS} seconds`, "error");
+      return;
+    }
     if (!isValidSuiAddress(recipient)) {
       showToast("Enter a valid Sui address (0x + 32–64 hex characters)", "error");
       return;
@@ -552,14 +562,14 @@ export default function App() {
             }
             setLoading(false);
           },
-          onError: () => {
-            showToast("Sui transaction failed", "error");
+          onError: (err: unknown) => {
+            showToast(getMoveErrorMessage(err, "Sui transaction failed"), "error");
             setLoading(false);
           },
         },
       );
-    } catch {
-      showToast("Failed to build Sui transaction", "error");
+    } catch (err) {
+      showToast(getMoveErrorMessage(err, "Failed to build Sui transaction"), "error");
       setLoading(false);
     }
   };
@@ -624,14 +634,14 @@ export default function App() {
             );
             setLoading(false);
           },
-          onError: () => {
-            showToast(`Sui ${kind} transaction failed`, "error");
+          onError: (err: unknown) => {
+            showToast(getMoveErrorMessage(err, `Sui ${kind} transaction failed`), "error");
             setLoading(false);
           },
         },
       );
-    } catch {
-      showToast("Failed to build Sui transaction", "error");
+    } catch (err) {
+      showToast(getMoveErrorMessage(err, "Failed to build Sui transaction"), "error");
       setLoading(false);
     }
   };
@@ -1189,7 +1199,26 @@ export default function App() {
               )}
             </h2>
 
-            {streams.length === 0 ? (
+            {loading && streams.length === 0 ? (
+              <div className="space-y-3">
+                {[1, 2].map((i) => (
+                  <div key={i} className="bg-deep border border-white/5 rounded-xl p-3 animate-pulse">
+                    <div className="flex justify-between mb-2">
+                      <div className="h-3 w-24 bg-white/10 rounded" />
+                      <div className="h-5 w-14 bg-white/10 rounded-full" />
+                    </div>
+                    <div className="h-1.5 bg-white/10 rounded-full mb-2" />
+                    <div className="flex justify-between">
+                      <div className="h-3 w-16 bg-white/10 rounded" />
+                      <div className="flex gap-1">
+                        <div className="h-6 w-12 bg-white/10 rounded-lg" />
+                        <div className="h-6 w-8 bg-white/10 rounded-lg" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : streams.length === 0 ? (
               <div className="text-center py-10 text-gray-500">
                 <div className="w-12 h-12 mx-auto mb-3 text-gray-600 opacity-30">{Icons.stream}</div>
                 <p className="text-sm">{pageConfig.emptyTitle}</p>

@@ -149,3 +149,13 @@ Future extensions:
 - Support multi-token streams by relying on type arguments and/or configuration objects.
 - Add protocol fees (percentage taken at claim or at create time).
 
+### Move Error Codes (stream.move)
+
+| Code | Function | Meaning |
+|------|----------|---------|
+| 1 | create_stream | Invalid duration: `end_time_ms` must be greater than `start_time_ms` |
+| 2 | create_stream | Invalid amount: `total_amount` must be greater than zero |
+| 3 | claim | Caller is not the stream recipient |
+| 4 | claim | Nothing to claim yet (claimable amount is zero) |
+| 5 | cancel | Caller is not the stream sender |
+

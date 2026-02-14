@@ -63,8 +63,9 @@ Record key transaction digests for verification:
 To get create_stream and claim tx links:
 
 1. Run frontend: `cd frontend && npm run dev`
-2. Connect wallet (testnet), use "Use my address" for recipient
-3. Create stream: amount `0.001`, duration `30s`, click Create Stream
-4. Stream ID auto-fills; wait ~30s for vesting
-5. Click "On-chain Claim"
-6. Copy tx digests from Suiexplorer (or Event Log) and add above
+2. Connect wallet (testnet), use **"Use my address"** for recipient
+3. Create stream: amount `0.001`, duration `30s` (min 10s), click Create Stream
+4. Stream ID auto-fills in the form
+5. Wait ~30s for vesting, then click **"On-chain Claim"**
+6. Copy tx digests from **Event Log** (click the tx link) or Suiexplorer
+7. Paste create digest into "Create stream (sample)" row, claim digest into "Claim (sample)" row above
