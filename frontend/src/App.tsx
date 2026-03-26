@@ -712,9 +712,11 @@ export default function App() {
               `${label} TX submitted: ${digest ? digest.slice(0, 10) + "..." : "ok"}`,
               "success",
             );
+            const eventType =
+              kind === "receipt" ? "receipt" : kind; // claim | cancel | receipt
             addEvent(
               `${label} TX: ${digest ? digest.slice(0, 16) + "..." : "ok"}`,
-              "tx",
+              eventType,
               digest || undefined,
             );
             setLoading(false);
@@ -1472,6 +1474,7 @@ export default function App() {
                     e.type === 'create' ? 'bg-cyan' : 
                     e.type === 'claim' ? 'bg-green-500' : 
                     e.type === 'cancel' ? 'bg-red-500' : 
+                    e.type === 'receipt' ? 'bg-purple-500' :
                     e.type === 'tx' ? 'bg-purple-500' : 'bg-gray-500'
                   }`} />
                   {e.digest ? (
