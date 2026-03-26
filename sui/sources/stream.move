@@ -50,6 +50,13 @@ module streaming_payment::stream {
         sender_refunded: u64,
     }
 
+    /// Emitted when a recipient successfully mints a StreamReceipt NFT.
+    public struct StreamReceiptMinted<phantom T> has copy, drop {
+        recipient: address,
+        total_amount: u64,
+        end_time_ms: u64,
+    }
+
     /// NFT receipt proving full completion of a stream. One per completed stream.
     public struct StreamReceipt<phantom T> has key, store {
         id: UID,
@@ -219,6 +226,12 @@ module streaming_payment::stream {
             total_amount,
             end_time_ms,
         };
+
+        event::emit(StreamReceiptMinted<T> {
+            recipient,
+            total_amount,
+            end_time_ms,
+        });
 
         transfer::transfer(receipt, recipient);
         coin::destroy_zero(coin);

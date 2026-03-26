@@ -127,6 +127,7 @@ interface Stream {
   amount: number;
   withdrawn: number;
   startTime: number;
+  cliffTime: number;
   endTime: number;
   tokenSymbol: string;
 }
@@ -282,6 +283,8 @@ export default function App() {
   const [recipient, setRecipient] = useState("");
   const [amount, setAmount] = useState("100");
   const [duration, setDuration] = useState("60");
+  // 0 = linear vesting (no cliff). Otherwise, vesting starts at startTime + cliffSeconds.
+  const [cliffSeconds, setCliffSeconds] = useState("0");
   // Page-specific inputs (for functional calculators)
   const [hourlyRate, setHourlyRate] = useState("50");        // Payroll: rate/hr → amount
   const [grantDays, setGrantDays] = useState("7");           // Grants: days → duration
@@ -337,8 +340,11 @@ export default function App() {
 
   const getProgress = (stream: Stream) => {
     const now = Date.now();
-    const total = stream.endTime - stream.startTime;
-    const elapsed = now - stream.startTime;
+    if (now < stream.cliffTime) return 0;
+    if (now >= stream.endTime) return 100;
+    const total = stream.endTime - stream.cliffTime;
+    if (total <= 0) return 100;
+    const elapsed = now - stream.cliffTime;
     return Math.min(Math.max(elapsed / total, 0), 1) * 100;
   };
 
@@ -378,13 +384,25 @@ export default function App() {
       return;
     }
 
+    const cliff = parseInt(cliffSeconds || "0", 10);
+    if (isNaN(cliff) || cliff < 0) {
+      showToast("Enter a valid cliff value (seconds)", "error");
+      return;
+    }
+    if (cliff > dur) {
+      showToast(`Cliff must be between 0 and ${dur} seconds`, "error");
+      return;
+    }
+
+    const start = Date.now();
     const newStream: Stream = {
       streamId: id,
       recipient: recipient,
       amount: amt,
       withdrawn: 0,
-      startTime: Date.now(),
-      endTime: Date.now() + dur * 1000,
+      startTime: start,
+      cliffTime: start + cliff * 1000,
+      endTime: start + dur * 1000,
       tokenSymbol: selectedToken.symbol,
     };
 
@@ -459,13 +477,15 @@ export default function App() {
     const amt = 50 * 1_000_000;
     const dur = 30;
 
+    const start = Date.now();
     const newStream: Stream = {
       streamId: id,
       recipient: "ST2BOB...DEMO",
       amount: amt,
       withdrawn: 0,
-      startTime: Date.now(),
-      endTime: Date.now() + dur * 1000,
+      startTime: start,
+      cliffTime: start,
+      endTime: start + dur * 1000,
       tokenSymbol: selectedToken.symbol,
     };
 
@@ -495,6 +515,16 @@ export default function App() {
       showToast(`Duration must be at least ${MIN_DURATION_SECONDS} seconds`, "error");
       return;
     }
+
+    const cliff = parseInt(cliffSeconds || "0", 10);
+    if (isNaN(cliff) || cliff < 0) {
+      showToast("Enter a valid cliff value (seconds)", "error");
+      return;
+    }
+    if (cliff > dur) {
+      showToast(`Cliff must be between 0 and ${dur} seconds`, "error");
+      return;
+    }
     if (!isValidSuiAddress(recipient)) {
       showToast("Enter a valid Sui address (0x + 32–64 hex characters)", "error");
       return;
@@ -516,6 +546,7 @@ export default function App() {
       const nowMs = Date.now();
       const startTimeMs = BigInt(nowMs);
       const endTimeMs = BigInt(nowMs + dur * 1000);
+      const cliffTimeMs = startTimeMs + BigInt(cliff) * 1000n;
 
       let streamCoin;
       if (isSUI) {
@@ -536,16 +567,30 @@ export default function App() {
       }
 
       const coinTypeArg = isSUI ? TOKEN_COIN_TYPES.SUI : getUSDCCoinType();
-      tx.moveCall({
-        target: `${SUI_STREAM_PACKAGE_ID}::${SUI_STREAM_MODULE}::create_stream`,
-        typeArguments: [coinTypeArg],
-        arguments: [
-          tx.pure.address(recipient),
-          streamCoin,
-          tx.pure.u64(startTimeMs),
-          tx.pure.u64(endTimeMs),
-        ],
-      });
+      if (cliff === 0) {
+        tx.moveCall({
+          target: `${SUI_STREAM_PACKAGE_ID}::${SUI_STREAM_MODULE}::create_stream`,
+          typeArguments: [coinTypeArg],
+          arguments: [
+            tx.pure.address(recipient),
+            streamCoin,
+            tx.pure.u64(startTimeMs),
+            tx.pure.u64(endTimeMs),
+          ],
+        });
+      } else {
+        tx.moveCall({
+          target: `${SUI_STREAM_PACKAGE_ID}::${SUI_STREAM_MODULE}::create_stream_with_cliff`,
+          typeArguments: [coinTypeArg],
+          arguments: [
+            tx.pure.address(recipient),
+            streamCoin,
+            tx.pure.u64(startTimeMs),
+            tx.pure.u64(cliffTimeMs),
+            tx.pure.u64(endTimeMs),
+          ],
+        });
+      }
 
       signAndExecuteTransaction(
         {
@@ -1206,6 +1251,20 @@ export default function App() {
                   </div>
                 </div>
               )}
+
+              {/* Cliff (optional) */}
+              <div className="p-2 rounded-lg bg-cyan/10 border border-cyan/20 mt-2">
+                <label className="block text-[10px] text-cyan mb-1 uppercase">Cliff (seconds)</label>
+                <input
+                  type="number"
+                  aria-label="Cliff in seconds"
+                  value={cliffSeconds}
+                  onChange={(e) => setCliffSeconds(e.target.value)}
+                  className="input py-1.5 text-sm"
+                  min="0"
+                />
+                <div className="text-[10px] text-gray-500 mt-1">0 = linear vesting (no cliff)</div>
+              </div>
             </div>
 
             <button 
